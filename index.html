@@ -972,7 +972,7 @@ function onRemoteDataChange(){
   if(picks.length !== lastRenderedPickCount){
     const advanced = picks.length > lastRenderedPickCount && lastRenderedPickCount >= 0;
     lastRenderedPickCount = picks.length;
-    if(advanced){
+    if(advanced && isCommissioner){
       const lastPick = picks[picks.length-1];
       const player = allPlayers().find(p=>p.id===lastPick.playerId);
       if(player){
