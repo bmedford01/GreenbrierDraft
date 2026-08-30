@@ -134,11 +134,11 @@ button{font-family:inherit; cursor:pointer;}
 
 /* ---- turn timer ---- */
 .timer-block{display:flex; flex-direction:column; align-items:center; gap:6px; padding:0 6px;}
-.timer-digits{font-size:40px; font-weight:700; color:var(--chalk); line-height:1; min-width:78px; text-align:center;}
+.timer-digits{font-size:40px; font-weight:700; color:var(--chalk); line-height:1; width:92px; text-align:center;}
 .timer-digits.tier-warn{color:var(--amber); animation:timerPulseWarn 1s ease-in-out infinite;}
 .timer-digits.tier-urgent{color:#ff6357; animation:timerPulseUrgent .5s ease-in-out infinite;}
-@keyframes timerPulseWarn{0%,100%{opacity:1; transform:scale(1);}50%{opacity:0.5; transform:scale(1.05);}}
-@keyframes timerPulseUrgent{0%,100%{opacity:1; transform:scale(1);}50%{opacity:0.25; transform:scale(1.14);}}
+@keyframes timerPulseWarn{0%,100%{opacity:1;}50%{opacity:0.5;}}
+@keyframes timerPulseUrgent{0%,100%{opacity:1;}50%{opacity:0.25;}}
 .timer-controls{display:flex; gap:5px;}
 .ticon{
   width:26px; height:26px; border-radius:7px; border:1px solid var(--line-strong); background:var(--panel-2);
@@ -214,7 +214,7 @@ button{font-family:inherit; cursor:pointer;}
   .hero-meta .metric .v{font-size:17px;}
   .hero-next{display:none;}
   .clock-tag{font-size:9.5px;}
-  .timer-digits{font-size:32px;}
+  .timer-digits{font-size:32px; width:74px;}
 
   .board-wrap{border-right:none; border-bottom:1px solid var(--line); padding:14px 16px;}
   .mobile-board-toggle{display:inline-flex !important; font-size:11px; padding:6px 12px;}
