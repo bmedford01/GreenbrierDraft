@@ -1,0 +1,2009 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Draft Night — Live Board</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap');
+
+:root{
+  --bg:#0b120e;
+  --bg-2:#0e1712;
+  --panel:#121c16;
+  --panel-2:#17221b;
+  --line:rgba(237,239,233,0.09);
+  --line-strong:rgba(237,239,233,0.18);
+  --chalk:#edefe9;
+  --chalk-dim:#93a598;
+  --chalk-dim2:#6c7d70;
+  --turf:#3ccb6f;
+  --turf-dim:rgba(60,203,111,0.14);
+  --amber:#ffb020;
+  --amber-dim:rgba(255,176,32,0.16);
+  --taken:#3a453e;
+  --radius:10px;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:
+    radial-gradient(ellipse 1200px 600px at 50% -10%, rgba(60,203,111,0.10), transparent 60%),
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.014) 0px, rgba(255,255,255,0.014) 1px, transparent 1px, transparent 64px),
+    var(--bg);
+  color:var(--chalk);
+  font-family:'Inter',sans-serif;
+  min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+}
+.mono{font-family:'JetBrains Mono',monospace;}
+.display{font-family:'Oswald',sans-serif; text-transform:uppercase; letter-spacing:0.02em;}
+button{font-family:inherit; cursor:pointer;}
+::selection{background:var(--turf); color:#08150d;}
+::-webkit-scrollbar{width:10px; height:10px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--line-strong); border-radius:6px;}
+
+/* ---------- shared chrome ---------- */
+.topline{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:10px 22px; border-bottom:1px solid var(--line);
+  background:rgba(0,0,0,0.18);
+}
+.brand{display:flex; align-items:center; gap:10px;}
+.brand .dot{width:10px;height:10px;border-radius:50%;background:var(--turf); box-shadow:0 0 12px var(--turf);}
+.brand span{font-family:'Oswald'; text-transform:uppercase; letter-spacing:0.14em; font-size:13px; color:var(--chalk-dim);}
+.topbtns{display:flex; gap:8px;}
+.btn{
+  border:1px solid var(--line-strong); background:var(--panel-2); color:var(--chalk);
+  padding:8px 14px; border-radius:8px; font-size:12.5px; font-weight:600;
+  display:flex; align-items:center; gap:6px; transition:all .15s ease;
+}
+.btn:hover{border-color:var(--turf); color:var(--turf);}
+.btn.danger:hover{border-color:#e05555; color:#e88; }
+.btn.primary{background:var(--turf); border-color:var(--turf); color:#08150d;}
+.btn.primary:hover{filter:brightness(1.08); color:#08150d;}
+.btn:disabled{opacity:0.35; cursor:not-allowed;}
+
+/* ================= SETUP SCREEN ================= */
+#setup{max-width:920px; margin:0 auto; padding:40px 22px 80px;}
+.setup-hero{text-align:center; margin-bottom:34px;}
+.setup-hero h1{
+  font-family:'Oswald'; text-transform:uppercase; font-size:44px; margin:0 0 6px; letter-spacing:0.02em;
+  background:linear-gradient(180deg, var(--chalk), var(--chalk-dim));
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+}
+.setup-hero p{color:var(--chalk-dim); margin:0; font-size:14.5px;}
+.setup-card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:26px;}
+.setup-row-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;}
+.setup-row-head h2{font-family:'Oswald'; text-transform:uppercase; font-size:15px; letter-spacing:0.08em; margin:0; color:var(--chalk-dim);}
+.team-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+.team-input{
+  display:flex; align-items:center; gap:10px; background:var(--panel-2); border:1px solid var(--line);
+  border-radius:8px; padding:8px 10px;
+}
+.swatch{width:16px; height:16px; border-radius:4px; flex-shrink:0;}
+.team-input input{
+  flex:1; background:transparent; border:none; outline:none; color:var(--chalk); font-size:14.5px; font-weight:600;
+  font-family:'Inter';
+}
+.slot-label{font-family:'JetBrains Mono'; font-size:11px; color:var(--chalk-dim2); width:16px;}
+.setup-options{display:flex; gap:14px; margin-top:22px; flex-wrap:wrap; align-items:flex-end;}
+.field{display:flex; flex-direction:column; gap:6px;}
+.field label{font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:var(--chalk-dim2);}
+.field select, .field input[type=number]{
+  background:var(--panel-2); border:1px solid var(--line-strong); color:var(--chalk); border-radius:8px;
+  padding:9px 12px; font-size:14px; font-family:'JetBrains Mono'; width:110px;
+}
+.setup-actions{display:flex; justify-content:space-between; align-items:center; margin-top:28px;}
+
+/* ================= DRAFT SCREEN ================= */
+#draft{display:none;}
+
+.hero{
+  position:relative; overflow:hidden;
+  background:radial-gradient(ellipse 900px 300px at 20% 0%, var(--amber-dim), transparent 65%), var(--panel);
+  border-bottom:1px solid var(--line);
+  padding:18px 24px 16px;
+}
+.hero-inner{display:flex; align-items:center; justify-content:space-between; gap:24px; flex-wrap:wrap;}
+.hero-clock{display:flex; align-items:center; gap:16px;}
+.clock-tag{
+  font-family:'Oswald'; font-size:11px; letter-spacing:0.18em; color:var(--amber);
+  border:1px solid rgba(255,176,32,0.4); padding:4px 9px; border-radius:20px;
+  background:rgba(255,176,32,0.08);
+  animation:pulseTag 1.8s ease-in-out infinite;
+}
+@keyframes pulseTag{0%,100%{opacity:1;}50%{opacity:0.55;}}
+.hero-team{font-family:'Oswald'; font-size:40px; text-transform:uppercase; line-height:1; letter-spacing:0.01em;}
+.hero-meta{display:flex; gap:18px; align-items:baseline;}
+.hero-meta .metric{display:flex; flex-direction:column; gap:2px;}
+.hero-meta .metric .v{font-family:'JetBrains Mono'; font-size:22px; font-weight:700; color:var(--chalk);}
+.hero-meta .metric .k{font-size:10px; text-transform:uppercase; letter-spacing:0.1em; color:var(--chalk-dim2);}
+.hero-next{display:flex; align-items:center; gap:10px;}
+.hero-next .lbl{font-size:10.5px; text-transform:uppercase; letter-spacing:0.1em; color:var(--chalk-dim2); margin-right:4px;}
+.next-chip{
+  display:flex; align-items:center; gap:6px; padding:5px 10px; border-radius:20px; font-size:12px; font-weight:600;
+  background:var(--panel-2); border:1px solid var(--line);
+}
+.next-chip .sw{width:8px;height:8px;border-radius:50%;}
+.progress-track{margin-top:14px; height:6px; border-radius:4px; background:var(--panel-2); overflow:hidden; border:1px solid var(--line);}
+.progress-fill{height:100%; background:linear-gradient(90deg, var(--turf), var(--amber)); border-radius:4px; transition:width .4s ease;}
+
+/* ---- turn timer ---- */
+.timer-block{display:flex; flex-direction:column; align-items:center; gap:6px; padding:0 6px;}
+.timer-digits{font-size:40px; font-weight:700; color:var(--chalk); line-height:1; min-width:78px; text-align:center;}
+.timer-digits.tier-warn{color:var(--amber); animation:timerPulseWarn 1s ease-in-out infinite;}
+.timer-digits.tier-urgent{color:#ff6357; animation:timerPulseUrgent .5s ease-in-out infinite;}
+@keyframes timerPulseWarn{0%,100%{opacity:1; transform:scale(1);}50%{opacity:0.5; transform:scale(1.05);}}
+@keyframes timerPulseUrgent{0%,100%{opacity:1; transform:scale(1);}50%{opacity:0.25; transform:scale(1.14);}}
+.timer-controls{display:flex; gap:5px;}
+.ticon{
+  width:26px; height:26px; border-radius:7px; border:1px solid var(--line-strong); background:var(--panel-2);
+  color:var(--chalk-dim); font-size:12px; display:flex; align-items:center; justify-content:center; padding:0;
+}
+.ticon:hover{border-color:var(--turf); color:var(--turf);}
+.hero.hero-critical{animation:heroFlash .5s ease-in-out infinite;}
+@keyframes heroFlash{0%,100%{background-color:transparent;}50%{background-color:rgba(255,60,50,0.14);}}
+.preset-row{display:flex; gap:4px; margin-top:7px; flex-wrap:wrap;}
+.preset-chip{font-size:10.5px; padding:4px 9px; border-radius:12px; border:1px solid var(--line-strong); background:var(--panel-2); color:var(--chalk-dim); font-family:'Inter';}
+.preset-chip.active{background:var(--turf); border-color:var(--turf); color:#08150d; font-weight:700;}
+
+/* ---- grades screen ---- */
+.grades-screen{padding:26px 24px 40px; max-width:1200px; margin:0 auto;}
+.grades-head{text-align:center; margin-bottom:26px;}
+.grades-head h1{font-family:'Oswald'; text-transform:uppercase; font-size:36px; color:var(--turf); margin:0 0 6px;}
+.grades-head p{color:var(--chalk-dim); font-size:13px; margin:0;}
+.grades-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(230px,1fr)); gap:14px;}
+.grade-card{
+  background:var(--panel); border:1px solid var(--line-strong); border-radius:var(--radius); padding:16px;
+  display:flex; flex-direction:column; gap:10px;
+}
+.grade-card-top{display:flex; align-items:center; gap:12px;}
+.grade-letter{font-family:'Oswald'; font-size:38px; font-weight:700; line-height:1; min-width:56px;}
+.gt-name{font-size:15px; font-weight:700;}
+.gt-sub{font-size:11px; color:var(--chalk-dim2); font-family:'JetBrains Mono';}
+.grade-blurb{font-size:12.5px; color:var(--chalk-dim); line-height:1.4;}
+.grade-posrow{display:flex; gap:5px; flex-wrap:wrap;}
+.pos-chip{font-size:10px; font-family:'JetBrains Mono'; padding:3px 7px; border-radius:5px; background:var(--panel-2); border:1px solid var(--line); color:var(--chalk-dim2);}
+
+/* ---- edit teams modal ---- */
+.modal-overlay{
+  position:fixed; inset:0; background:rgba(6,10,8,0.72); backdrop-filter:blur(2px);
+  display:flex; align-items:center; justify-content:center; z-index:50; padding:20px;
+}
+.modal-card{
+  background:var(--panel); border:1px solid var(--line-strong); border-radius:var(--radius);
+  padding:24px; max-width:640px; width:100%; max-height:86vh; overflow-y:auto;
+}
+.modal-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;}
+.modal-head h2{font-size:20px; color:var(--chalk); margin:0;}
+.modal-actions{display:flex; justify-content:space-between; align-items:center; margin-top:20px; gap:14px; flex-wrap:wrap;}
+
+.pron-list{max-height:280px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; padding:6px; background:var(--bg-2);}
+.pron-row{display:flex; align-items:center; gap:8px; padding:6px 8px;}
+.pron-row .pn-name{flex:0 0 150px; font-size:12.5px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.pron-row input{flex:1; background:var(--panel-2); border:1px solid var(--line-strong); border-radius:6px; color:var(--chalk); padding:6px 8px; font-size:12.5px; font-family:'Inter';}
+.pron-row .pn-test{width:26px; height:26px; border-radius:6px; border:1px solid var(--line-strong); background:var(--panel-2); color:var(--chalk-dim); font-size:11px; flex-shrink:0;}
+.pron-row .pn-test:hover{border-color:var(--turf); color:var(--turf);}
+
+.workspace{display:grid; grid-template-columns:1.55fr 1fr; gap:0; align-items:start;}
+@media (max-width:980px){.workspace{grid-template-columns:1fr;}}
+
+/* ---- board ---- */
+.board-wrap{padding:18px 20px; border-right:1px solid var(--line); min-height:0;}
+.section-title{
+  display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;
+}
+.section-title h2{font-family:'Oswald'; text-transform:uppercase; font-size:14px; letter-spacing:0.1em; color:var(--chalk-dim); margin:0;}
+.board-scroll{overflow:auto; border:1px solid var(--line); border-radius:var(--radius); background:var(--bg-2);}
+table.board{border-collapse:separate; border-spacing:0; width:100%; min-width:760px;}
+table.board th{
+  position:sticky; top:0; z-index:2; background:var(--panel); font-family:'Oswald'; font-weight:500;
+  font-size:12px; text-transform:uppercase; letter-spacing:0.03em; padding:9px 6px; text-align:center;
+  border-bottom:1px solid var(--line-strong); white-space:nowrap;
+}
+table.board th .tname{display:block;}
+table.board th .bar{height:3px; border-radius:2px; margin-top:6px;}
+table.board td.rnd{
+  position:sticky; left:0; z-index:1; background:var(--panel); text-align:center; font-family:'JetBrains Mono';
+  font-size:11px; color:var(--chalk-dim2); border-right:1px solid var(--line-strong); width:38px; min-width:38px;
+}
+table.board td.rnd .chev{display:block; font-size:13px; color:var(--chalk-dim2); margin-top:2px;}
+table.board td{
+  border-bottom:1px solid var(--line); border-right:1px solid var(--line); padding:6px 7px; text-align:center;
+  font-size:12px; min-width:96px; height:38px; vertical-align:middle;
+}
+td.cell-empty{color:var(--chalk-dim2); font-family:'JetBrains Mono'; font-size:10.5px;}
+td.cell-pick .pos{font-size:9.5px; font-weight:700; opacity:0.75; margin-right:4px;}
+td.cell-pick{font-weight:600;}
+td.cell-onclock{
+  background:var(--amber-dim); border:1.5px dashed var(--amber) !important; color:var(--amber);
+  font-family:'Oswald'; font-size:11px; letter-spacing:0.06em; animation:pulseCell 1.4s ease-in-out infinite;
+}
+@keyframes pulseCell{0%,100%{background:var(--amber-dim);}50%{background:rgba(255,176,32,0.32);}}
+
+/* ---- pool ---- */
+.pool-wrap{padding:18px 20px; display:flex; flex-direction:column; min-height:0;}
+.pool-controls{display:flex; flex-direction:column; gap:10px; margin-bottom:12px;}
+.search-row{display:flex; gap:8px;}
+.search-row input{
+  flex:1; background:var(--panel-2); border:1px solid var(--line-strong); border-radius:8px; color:var(--chalk);
+  padding:10px 12px; font-size:14px; font-family:'Inter';
+}
+.search-row input:focus{outline:none; border-color:var(--turf);}
+.pos-tabs{display:flex; gap:6px; flex-wrap:wrap;}
+.pos-tab{
+  padding:6px 12px; border-radius:20px; font-size:12px; font-weight:700; border:1px solid var(--line-strong);
+  background:var(--panel-2); color:var(--chalk-dim);
+}
+.pos-tab.active{background:var(--turf); border-color:var(--turf); color:#08150d;}
+.pool-list{flex:1; overflow-y:auto; border:1px solid var(--line); border-radius:var(--radius); background:var(--bg-2); padding:6px;}
+.player-row{
+  display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:8px; margin-bottom:3px;
+  transition:background .12s ease;
+}
+.player-row:hover{background:var(--panel-2);}
+.player-rank{font-family:'JetBrains Mono'; font-size:11px; color:var(--chalk-dim2); width:28px; text-align:right; flex-shrink:0;}
+.player-pos{
+  font-size:10px; font-weight:800; padding:3px 6px; border-radius:5px; flex-shrink:0; min-width:30px; text-align:center;
+  background:var(--panel-2); border:1px solid var(--line-strong); color:var(--chalk-dim);
+}
+.player-name{flex:1; font-size:14px; font-weight:600;}
+.player-team{font-size:11px; color:var(--chalk-dim2); font-family:'JetBrains Mono'; margin-right:2px;}
+.draft-btn{
+  border:1px solid var(--turf); color:var(--turf); background:transparent; padding:6px 12px; border-radius:7px;
+  font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; flex-shrink:0;
+}
+.draft-btn:hover{background:var(--turf); color:#08150d;}
+.draft-btn:disabled{opacity:0.35; cursor:not-allowed; background:transparent;}
+.draft-btn:disabled:hover{background:transparent; color:var(--turf);}
+.drafted-row{opacity:0.42;}
+.drafted-row .player-name{text-decoration:line-through; color:var(--chalk-dim2);}
+.drafted-row .badge{
+  font-size:10px; font-family:'JetBrains Mono'; color:var(--chalk-dim2); flex-shrink:0;
+}
+.drafted-toggle{
+  display:flex; justify-content:space-between; align-items:center; padding:10px 4px 2px; font-size:12px;
+  color:var(--chalk-dim); cursor:pointer; user-select:none;
+}
+.add-custom{
+  display:flex; gap:8px; margin-top:10px;
+}
+.add-custom input, .add-custom select{
+  background:var(--panel-2); border:1px solid var(--line-strong); border-radius:8px; color:var(--chalk);
+  padding:8px 10px; font-size:12.5px;
+}
+.add-custom input{flex:1;}
+.empty-note{color:var(--chalk-dim2); font-size:12.5px; text-align:center; padding:20px 10px;}
+
+/* ---- complete screen ---- */
+.done-banner{
+  text-align:center; padding:60px 20px; grid-column:1/-1;
+}
+.done-banner h1{font-family:'Oswald'; text-transform:uppercase; font-size:38px; color:var(--turf); margin-bottom:10px;}
+.done-banner p{color:var(--chalk-dim); font-size:14px;}
+
+.footer-note{
+  text-align:center; padding:10px; font-size:11px; color:var(--chalk-dim2); border-top:1px solid var(--line);
+}
+
+/* ---- masthead ---- */
+.masthead{
+  text-align:center; padding:20px 20px 12px;
+  background:radial-gradient(ellipse 800px 220px at 50% -60%, rgba(60,203,111,0.16), transparent 70%);
+  border-bottom:1px solid var(--line);
+}
+.masthead-inner{display:flex; align-items:center; justify-content:center; gap:10px;}
+.masthead-inner h1{
+  font-family:'Oswald'; text-transform:uppercase; letter-spacing:0.03em; font-size:30px; margin:0; color:var(--chalk);
+}
+.masthead-edit{
+  background:transparent; border:none; color:var(--chalk-dim2); font-size:14px; opacity:0.5; padding:4px;
+}
+.masthead-edit:hover{opacity:1; color:var(--turf);}
+.masthead-sub{
+  font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--turf); margin-top:5px; font-weight:600;
+}
+
+/* ---- remote draft: role banner, waiting screen, link list ---- */
+.role-banner{
+  text-align:center; padding:9px 16px; font-size:12.5px; font-weight:700; letter-spacing:0.03em;
+  background:var(--turf-dim); color:var(--turf); border-bottom:1px solid var(--line);
+}
+.role-banner.your-turn{
+  background:var(--amber-dim); color:var(--amber); animation:timerPulseWarn 1.2s ease-in-out infinite;
+}
+.waiting-screen{
+  max-width:560px; margin:60px auto; text-align:center; padding:0 20px;
+}
+.waiting-screen h1{font-family:'Oswald'; text-transform:uppercase; font-size:28px; color:var(--chalk); margin-bottom:10px;}
+.waiting-screen p{color:var(--chalk-dim); font-size:14px; line-height:1.5;}
+.waiting-dot{
+  width:10px; height:10px; border-radius:50%; background:var(--amber); display:inline-block; margin-right:8px;
+  animation:pulseTag 1.4s ease-in-out infinite;
+}
+.link-row{
+  display:flex; align-items:center; gap:8px; padding:7px 10px; border-radius:8px; background:var(--panel-2);
+  border:1px solid var(--line); margin-bottom:6px;
+}
+.link-row .lr-label{width:26px; flex-shrink:0; font-family:'JetBrains Mono'; font-size:11px; color:var(--chalk-dim2);}
+.link-row .lr-name{flex:0 0 150px; font-size:12.5px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.link-row input{
+  flex:1; background:var(--bg-2); border:1px solid var(--line-strong); border-radius:6px; color:var(--chalk-dim);
+  padding:6px 8px; font-size:11px; font-family:'JetBrains Mono';
+}
+.link-row .lr-copy{
+  flex-shrink:0; font-size:11px; padding:6px 10px; border-radius:6px; border:1px solid var(--line-strong);
+  background:var(--panel); color:var(--chalk-dim);
+}
+.link-row .lr-copy:hover{border-color:var(--turf); color:var(--turf);}
+.conn-status{
+  display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; padding:5px 10px; border-radius:20px;
+}
+.conn-status.on{background:var(--turf-dim); color:var(--turf);}
+.conn-status.off{background:rgba(255,99,87,0.12); color:#ff6357;}
+</style>
+</head>
+<body>
+
+<div class="masthead">
+  <div class="masthead-inner">
+    <h1 id="mastheadTitle">Greenbrier Fantasy Football Draft 2026</h1>
+    <button class="masthead-edit" id="mastheadEdit" title="Rename league">✏️</button>
+  </div>
+  <div class="masthead-sub">Live Snake Draft</div>
+</div>
+
+<div class="topline">
+  <div class="brand"><div class="dot"></div><span>Draft Night</span></div>
+  <div style="display:flex; gap:8px; align-items:center;">
+    <button class="btn" id="remoteBtnStatic" style="display:none;">🌐 Remote Draft</button>
+    <div class="topbtns" id="topbtns"></div>
+  </div>
+</div>
+
+<div class="role-banner" id="roleBanner" style="display:none;"></div>
+
+<div class="waiting-screen" id="waitingScreen" style="display:none;">
+  <h1><span class="waiting-dot"></span>Waiting for the commissioner</h1>
+  <p id="waitingSub">The draft hasn't started yet. This page will update automatically the moment it kicks off — no need to refresh.</p>
+</div>
+
+<div id="setup">
+  <div class="setup-hero">
+    <h1>Set The Board</h1>
+    <p>Name your teams, pick a draft length, then kick off a live snake draft everyone can watch.</p>
+  </div>
+  <div class="setup-card">
+    <div class="setup-row-head">
+      <h2>Teams (10)</h2>
+      <button class="btn" id="shuffleBtn">🔀 Shuffle order</button>
+    </div>
+    <div class="team-grid" id="teamGrid"></div>
+    <div class="setup-options">
+      <div class="field">
+        <label>Rounds</label>
+        <select id="roundsSelect">
+          <option value="12">12</option>
+          <option value="13">13</option>
+          <option value="14">14</option>
+          <option value="15" selected>15</option>
+          <option value="16">16</option>
+          <option value="17">17</option>
+          <option value="18">18</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Pick timer (sec, 0 = off)</label>
+        <input type="number" id="timerInput" min="0" step="5" value="60">
+        <div class="preset-row" id="timerPresets">
+          <button type="button" class="preset-chip" data-t="0">Off</button>
+          <button type="button" class="preset-chip" data-t="30">30s</button>
+          <button type="button" class="preset-chip active" data-t="60">60s</button>
+          <button type="button" class="preset-chip" data-t="90">90s</button>
+          <button type="button" class="preset-chip" data-t="120">120s</button>
+        </div>
+      </div>
+    </div>
+    <div class="setup-actions">
+      <span style="color:var(--chalk-dim2); font-size:12px;">Player pool: top 200 (2026 consensus) + K/D-ST — add anyone missing during the draft.</span>
+      <button class="btn primary" id="startBtn" style="padding:11px 22px; font-size:14px;">Start Draft →</button>
+    </div>
+  </div>
+</div>
+
+<div id="draft">
+  <div class="hero">
+    <div class="hero-inner">
+      <div class="hero-clock">
+        <div class="clock-tag" id="clockTag">On the clock</div>
+        <div class="hero-team" id="heroTeam">—</div>
+      </div>
+      <div class="timer-block" id="timerBlock" style="display:none;">
+        <div class="timer-digits mono" id="timerDigits">--</div>
+        <div class="timer-controls">
+          <button class="ticon" id="timerPauseBtn" title="Pause / resume">⏸</button>
+          <button class="ticon" id="timerResetBtn" title="Reset timer">↺</button>
+          <button class="ticon" id="timerExtendBtn" title="+10 seconds">+10</button>
+          <button class="ticon" id="timerMuteBtn" title="Mute / unmute">🔊</button>
+        </div>
+      </div>
+      <div class="hero-meta">
+        <div class="metric"><div class="v" id="metricPick">—</div><div class="k">Overall Pick</div></div>
+        <div class="metric"><div class="v" id="metricRound">—</div><div class="k">Round</div></div>
+        <div class="metric"><div class="v" id="metricSlot">—</div><div class="k">Slot</div></div>
+      </div>
+      <div class="hero-next" id="heroNext"></div>
+    </div>
+    <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+  </div>
+
+  <div class="workspace" id="workspace">
+    <div class="board-wrap">
+      <div class="section-title"><h2>Draft Board</h2><span class="mono" id="boardCount" style="font-size:11px;color:var(--chalk-dim2);"></span></div>
+      <div class="board-scroll"><table class="board" id="boardTable"></table></div>
+    </div>
+    <div class="pool-wrap">
+      <div class="section-title"><h2>Player Pool</h2><span class="mono" id="poolCount" style="font-size:11px;color:var(--chalk-dim2);"></span></div>
+      <div class="pool-controls">
+        <div class="search-row"><input type="text" id="searchInput" placeholder="Search players…"></div>
+        <div class="pos-tabs" id="posTabs"></div>
+      </div>
+      <div class="pool-list" id="poolList"></div>
+      <div class="add-custom">
+        <input type="text" id="customName" placeholder="Add a player not listed…">
+        <select id="customPos">
+          <option>QB</option><option>RB</option><option>WR</option><option>TE</option><option>K</option><option>DST</option>
+        </select>
+        <button class="btn" id="customAddBtn">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="grades-screen" id="gradesScreen" style="display:none;"></div>
+
+  <div class="footer-note">Click a player to draft them to the team on the clock · Undo fixes mistakes · Progress saves automatically</div>
+</div>
+
+<div class="modal-overlay" id="editTeamsModal" style="display:none;">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2 class="display">Edit Team Names</h2>
+      <button class="btn" id="editTeamsClose">✕</button>
+    </div>
+    <div class="team-grid" id="editTeamGrid"></div>
+    <div class="modal-actions">
+      <span style="color:var(--chalk-dim2); font-size:12px;">Renaming a team keeps every pick already made — nothing resets.</span>
+      <button class="btn primary" id="editTeamsSave">Save names</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="announcerModal" style="display:none;">
+  <div class="modal-card" style="max-width:700px;">
+    <div class="modal-head">
+      <h2 class="display">Announcer Settings</h2>
+      <button class="btn" id="announcerClose">✕</button>
+    </div>
+    <div class="field" style="margin-bottom:16px; width:100%;">
+      <label>Voice Engine</label>
+      <select id="ttsProviderSelect" style="width:100%; margin-top:6px;">
+        <option value="browser">Browser voice (free)</option>
+        <option value="elevenlabs">ElevenLabs AI voice (your API key)</option>
+      </select>
+    </div>
+    <div id="elevenFields" style="display:none; width:100%; margin-bottom:16px;">
+      <div class="field" style="width:100%;">
+        <label>ElevenLabs API Key</label>
+        <input type="password" id="elevenKeyInput" placeholder="Paste your API key" style="width:100%; margin-top:6px; background:var(--panel-2); border:1px solid var(--line-strong); border-radius:8px; color:var(--chalk); padding:9px 12px; font-size:13px;">
+      </div>
+      <div class="field" style="width:100%; margin-top:10px;">
+        <label>Voice ID</label>
+        <input type="text" id="elevenVoiceInput" placeholder="Paste the voice ID" style="width:100%; margin-top:6px; background:var(--panel-2); border:1px solid var(--line-strong); border-radius:8px; color:var(--chalk); padding:9px 12px; font-size:13px;">
+      </div>
+      <div style="color:var(--chalk-dim2); font-size:11.5px; margin-top:8px; line-height:1.4;">
+        In ElevenLabs, open the voice (Voice Library or "My Voices"), then copy its Voice ID from the voice's page. Your key is stored only in this browser and sent only to ElevenLabs — never to anyone else.
+      </div>
+    </div>
+    <div class="field" id="browserVoiceField" style="margin-bottom:16px; width:100%;">
+      <label>Voice</label>
+      <select id="voiceSelect" style="width:100%; margin-top:6px;"></select>
+    </div>
+    <button class="btn" id="voiceTestBtn" style="margin-bottom:16px;">▶ Test voice</button>
+    <div class="field" style="width:100%;">
+      <label>Pronunciations <span style="color:var(--chalk-dim2); font-weight:400; text-transform:none; letter-spacing:0;">— best-effort phonetic spellings, edit anything that sounds off</span></label>
+      <input type="text" id="pronSearch" placeholder="Search players…" style="width:100%; margin:8px 0; background:var(--panel-2); border:1px solid var(--line-strong); border-radius:8px; color:var(--chalk); padding:9px 12px; font-size:13px;">
+      <div id="pronList" class="pron-list"></div>
+    </div>
+    <div class="modal-actions">
+      <span style="color:var(--chalk-dim2); font-size:12px;">Applies to picks from now on.</span>
+      <button class="btn primary" id="pronSaveBtn">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="remoteModal" style="display:none;">
+  <div class="modal-card" style="max-width:680px;">
+    <div class="modal-head">
+      <h2 class="display">Remote Draft</h2>
+      <button class="btn" id="remoteClose">✕</button>
+    </div>
+    <div style="margin-bottom:14px;">
+      <span class="conn-status off" id="connStatus">● Not connected</span>
+    </div>
+    <div id="remoteConfigFields">
+      <p style="color:var(--chalk-dim2); font-size:12.5px; line-height:1.5; margin-top:0;">
+        Paste your Firebase Realtime Database config to let people draft from their own devices. See the setup guide for how to create one — it's free.
+      </p>
+      <div class="field" style="width:100%;">
+        <label>API Key</label>
+        <input type="text" id="fbApiKey" placeholder="AIza..." style="width:100%; margin-top:6px; background:var(--panel-2); border:1px solid var(--line-strong); border-radius:8px; color:var(--chalk); padding:9px 12px; font-size:13px;">
+      </div>
+      <div class="field" style="width:100%; margin-top:10px;">
+        <label>Database URL</label>
+        <input type="text" id="fbDbUrl" placeholder="https://your-project-default-rtdb.firebaseio.com" style="width:100%; margin-top:6px; background:var(--panel-2); border:1px solid var(--line-strong); border-radius:8px; color:var(--chalk); padding:9px 12px; font-size:13px;">
+      </div>
+      <div class="field" style="width:100%; margin-top:10px;">
+        <label>Project ID</label>
+        <input type="text" id="fbProjectId" placeholder="your-project-id" style="width:100%; margin-top:6px; background:var(--panel-2); border:1px solid var(--line-strong); border-radius:8px; color:var(--chalk); padding:9px 12px; font-size:13px;">
+      </div>
+      <button class="btn primary" id="fbConnectBtn" style="margin-top:12px;">Connect</button>
+    </div>
+    <div id="remoteLinks" style="display:none; margin-top:18px;">
+      <div class="section-title" style="margin-bottom:8px;"><h2>Share these links</h2></div>
+      <div class="link-row"><span class="lr-label">🎙</span><span class="lr-name">Commissioner (you)</span><input type="text" id="linkCommish" readonly><button class="lr-copy" data-copy="linkCommish">Copy</button></div>
+      <div id="teamLinksList"></div>
+      <div style="color:var(--chalk-dim2); font-size:11.5px; margin-top:10px; line-height:1.4;">
+        Each team link only lets that person draft on their own turn — everyone sees the board update live. This only works once the file is hosted somewhere public (not opened as a local file) — see the setup guide.
+      </div>
+      <button class="btn danger" id="fbDisconnectBtn" style="margin-top:14px;">Disconnect</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================= DATA ============================= */
+const TEAM_COLORS = ['#3ccb6f','#4fc3f7','#ff8a50','#b388ff','#f06292','#e0c341','#26c6da','#ff6b6b','#7c8cff','#9ccc65'];
+
+const RANKED_RAW = `
+1|Jahmyr Gibbs|DET|RB
+2|Bijan Robinson|ATL|RB
+3|Ja'Marr Chase|CIN|WR
+4|Puka Nacua|LAR|WR
+5|Jaxon Smith-Njigba|SEA|WR
+6|Christian McCaffrey|SF|RB
+7|Amon-Ra St. Brown|DET|WR
+8|Jonathan Taylor|IND|RB
+9|Justin Jefferson|MIN|WR
+10|CeeDee Lamb|DAL|WR
+11|James Cook|BUF|RB
+12|Saquon Barkley|PHI|RB
+13|De'Von Achane|MIA|RB
+14|Drake London|ATL|WR
+15|Nico Collins|HOU|WR
+16|Brock Bowers|LV|TE
+17|Derrick Henry|BAL|RB
+18|Kenneth Walker III|KC|RB
+19|Chase Brown|CIN|RB
+20|A.J. Brown|PHI|WR
+21|Malik Nabers|NYG|WR
+22|Rashee Rice|KC|WR
+23|George Pickens|DAL|WR
+24|Omarion Hampton|LAC|RB
+25|Trey McBride|ARI|TE
+26|Chris Olave|NO|WR
+27|Travis Etienne Jr.|NO|RB
+28|Kyren Williams|LAR|RB
+29|Ashton Jeanty|LV|RB
+30|Josh Jacobs|GB|RB
+31|Josh Allen|BUF|QB
+32|Jeremiyah Love|ARI|RB
+33|Javonte Williams|DAL|RB
+34|Tetairoa McMillan|CAR|WR
+35|Colston Loveland|CHI|TE
+36|Tee Higgins|CIN|WR
+37|Breece Hall|NYJ|RB
+38|Zay Flowers|BAL|WR
+39|Ladd McConkey|LAC|WR
+40|DeVonta Smith|PHI|WR
+41|Bucky Irving|TB|RB
+42|Cam Skattebo|NYG|RB
+43|Jaylen Waddle|DEN|WR
+44|David Montgomery|HOU|RB
+45|D'Andre Swift|CHI|RB
+46|Lamar Jackson|BAL|QB
+47|Garrett Wilson|NYJ|WR
+48|Quinshon Judkins|CLE|RB
+49|Emeka Egbuka|TB|WR
+50|Mike Evans|SF|WR
+51|Bhayshul Tuten|JAX|RB
+52|TreVeyon Henderson|NE|RB
+53|Davante Adams|LAR|WR
+54|Jadarian Price|SEA|RB
+55|Terry McLaurin|WAS|WR
+56|Jameson Williams|DET|WR
+57|Tyler Warren|IND|TE
+58|Luther Burden III|CHI|WR
+59|Jayden Daniels|WAS|QB
+60|Carnell Tate|TEN|WR
+61|Christian Watson|GB|WR
+62|Rome Odunze|CHI|WR
+63|D.J. Moore|BUF|WR
+64|Joe Burrow|CIN|QB
+65|Jaylen Warren|PIT|RB
+66|Drake Maye|NE|QB
+67|Blake Corum|LAR|RB
+68|Brian Thomas Jr.|JAX|WR
+69|Parker Washington|JAX|WR
+70|Marvin Harrison Jr.|ARI|WR
+71|Harold Fannin|CLE|TE
+72|Rico Dowdle|PIT|RB
+73|DK Metcalf|PIT|WR
+74|Tony Pollard|TEN|RB
+75|Jonathon Brooks|CAR|RB
+76|Rhamondre Stevenson|NE|RB
+77|Jordan Addison|MIN|WR
+78|J.K. Dobbins|DEN|RB
+79|RJ Harvey|DEN|RB
+80|Jalen Hurts|PHI|QB
+81|Tucker Kraft|GB|TE
+82|Makai Lemon|PHI|WR
+83|Dak Prescott|DAL|QB
+84|Michael Wilson|ARI|WR
+85|Justin Herbert|LAC|QB
+86|Patrick Mahomes|KC|QB
+87|Kyle Monangai|CHI|RB
+88|Sam LaPorta|DET|TE
+89|Caleb Williams|CHI|QB
+90|Josh Downs|IND|WR
+91|Jayden Reed|GB|WR
+92|Courtland Sutton|DEN|WR
+93|Chris Godwin|TB|WR
+94|Chuba Hubbard|CAR|RB
+95|Kyle Pitts|ATL|TE
+96|Rachaad White|WAS|RB
+97|Aaron Jones|MIN|RB
+98|Jaxson Dart|NYG|QB
+99|Jakobi Meyers|JAX|WR
+100|Wan'Dale Robinson|TEN|WR
+101|Chris Rodriguez|JAX|RB
+102|Kenneth Gainwell|TB|RB
+103|Romeo Doubs|NE|WR
+104|Xavier Worthy|KC|WR
+105|Stefon Diggs|WAS|WR
+106|Jordan Love|GB|QB
+107|Brock Purdy|SF|QB
+108|KC Concepcion|CLE|WR
+109|Jordan Mason|MIN|RB
+110|Jacory Croskey-Merritt|WAS|RB
+111|Quentin Johnston|LAC|WR
+112|Alec Pierce|IND|WR
+113|Matthew Stafford|LAR|QB
+114|Keaton Mitchell|LAC|RB
+115|Jake Ferguson|DAL|TE
+116|Woody Marks|HOU|RB
+117|Trevor Lawrence|JAX|QB
+118|Matthew Golden|GB|WR
+119|Dalton Kincaid|BUF|TE
+120|Travis Kelce|KC|TE
+121|Travis Hunter|JAX|WR
+122|Jared Goff|DET|QB
+123|Michael Pittman Jr.|PIT|WR
+124|Kyler Murray|MIN|QB
+125|Mark Andrews|BAL|TE
+126|Bo Nix|DEN|QB
+127|Khalil Shakir|BUF|WR
+128|George Kittle|SF|TE
+129|Tyler Allgeier|ARI|RB
+130|Omar Cooper Jr.|NYJ|WR
+131|Tyjae Spears|TEN|RB
+132|Baker Mayfield|TB|QB
+133|Dallas Goedert|PHI|TE
+134|Deebo Samuel|FA|WR
+135|Jalen Coker|CAR|WR
+136|Dylan Sampson|CLE|RB
+137|De'Zhaun Stribling|SF|WR
+138|Jordyn Tyson|NO|WR
+139|Jauan Jennings|MIN|WR
+140|Rashid Shaheed|SEA|WR
+141|Sam Darnold|SEA|QB
+142|Tyler Shough|NO|QB
+143|Juwan Johnson|NO|TE
+144|Jonah Coleman|DEN|RB
+145|Zach Charbonnet|SEA|RB
+146|Brian Robinson Jr.|ATL|RB
+147|Keenan Allen|IND|WR
+148|Isaiah Likely|NYG|TE
+149|Tre Tucker|LV|WR
+150|Denzel Boston|CLE|WR
+151|Germie Bernard|PIT|WR
+152|MarShawn Lloyd|GB|RB
+153|Braelon Allen|NYJ|RB
+154|Jalen McMillan|TB|WR
+155|Mike Washington|LV|RB
+156|Ja'Kobi Lane|BAL|WR
+157|Hunter Henry|NE|TE
+158|C.J. Stroud|HOU|QB
+159|Caleb Douglas|MIA|WR
+160|Brenton Strange|JAX|TE
+161|Tre Harris|LAC|WR
+162|Adonai Mitchell|NYJ|WR
+163|Pat Bryant|DEN|WR
+164|Ted Hurst|TB|WR
+165|Daniel Jones|IND|QB
+166|Oronde Gadsden II|LAC|TE
+167|Jerry Jeudy|CLE|WR
+168|Calvin Ridley|TEN|WR
+169|Isiah Pacheco|DET|RB
+170|Malik Washington|MIA|WR
+171|Emmett Johnson|KC|RB
+172|T.J. Hockenson|MIN|TE
+173|Cyrus Allen|KC|WR
+174|Kayshon Boutte|NE|WR
+175|Sean Tucker|TB|RB
+176|Malik Willis|MIA|QB
+177|Zachariah Branch|ATL|WR
+178|Cooper Kupp|SEA|WR
+179|Tank Bigsby|PHI|RB
+180|Dontayvion Wicks|PHI|WR
+181|Tank Dell|HOU|WR
+182|Nick Singleton|TEN|RB
+183|Jaydon Blue|DAL|RB
+184|Chig Okonkwo|WAS|TE
+185|Kenyon Sadiq|NYJ|TE
+186|Bryce Lance|NO|WR
+187|Kaelon Black|SF|RB
+188|Tyrone Tracy Jr.|NYG|RB
+189|Dalton Schultz|HOU|TE
+190|DeVaughn Vele|NO|WR
+191|Alvin Kamara|NO|RB
+192|Kaytron Allen|WAS|RB
+193|George Holani|SEA|RB
+194|Jalen Nailor|LV|WR
+195|A.J. Barner|SEA|TE
+196|Isaac TeSlaa|DET|WR
+197|Rashod Bateman|BAL|WR
+198|Jaylin Noel|HOU|WR
+199|Darren Waller|CAR|TE
+`.trim().split('\n').map(line=>{
+  const [rank,name,team,pos]=line.split('|');
+  return {id:'r'+rank, rank:parseInt(rank), name, team, pos};
+});
+
+const DST_TEAMS = ['ARI','ATL','BAL','BUF','CAR','CHI','CIN','CLE','DAL','DEN','DET','GB','HOU','IND','JAX','KC','LAC','LAR','LV','MIA','MIN','NE','NO','NYG','NYJ','PHI','PIT','SEA','SF','TB','TEN','WAS'];
+const DST_LIST = DST_TEAMS.map(t=>({id:'dst-'+t, rank:null, name:t+' D/ST', team:t, pos:'DST'}));
+
+const KICKERS_RAW = `Justin Tucker|BAL
+Harrison Butker|KC
+Brandon Aubrey|DAL
+Chris Boswell|PIT
+Tyler Bass|BUF
+Cameron Dicker|LAC
+Younghoe Koo|ATL
+Jason Sanders|MIA
+Daniel Carlson|LV
+Evan McPherson|CIN
+Ka'imi Fairbairn|HOU
+Wil Lutz|DEN
+Jake Elliott|PHI
+Matt Gay|WAS
+Joshua Karty|LAR
+Cairo Santos|CHI
+Graham Gano|NYG
+Chad Ryland|ARI
+Brandon McManus|GB
+Jake Moody|SF`.trim().split('\n').map((line,i)=>{
+  const [name,team]=line.split('|');
+  return {id:'k-'+i, rank:null, name, team, pos:'K'};
+});
+
+const BASE_POOL = [...RANKED_RAW, ...DST_LIST, ...KICKERS_RAW];
+
+const TEAM_FULL = {
+  ARI:'Arizona Cardinals', ATL:'Atlanta Falcons', BAL:'Baltimore Ravens', BUF:'Buffalo Bills',
+  CAR:'Carolina Panthers', CHI:'Chicago Bears', CIN:'Cincinnati Bengals', CLE:'Cleveland Browns',
+  DAL:'Dallas Cowboys', DEN:'Denver Broncos', DET:'Detroit Lions', GB:'Green Bay Packers',
+  HOU:'Houston Texans', IND:'Indianapolis Colts', JAX:'Jacksonville Jaguars', KC:'Kansas City Chiefs',
+  LAC:'Los Angeles Chargers', LAR:'Los Angeles Rams', LV:'Las Vegas Raiders', MIA:'Miami Dolphins',
+  MIN:'Minnesota Vikings', NE:'New England Patriots', NO:'New Orleans Saints', NYG:'New York Giants',
+  NYJ:'New York Jets', PHI:'Philadelphia Eagles', PIT:'Pittsburgh Steelers', SEA:'Seattle Seahawks',
+  SF:'San Francisco 49ers', TB:'Tampa Bay Buccaneers', TEN:'Tennessee Titans', WAS:'Washington Commanders'
+};
+const POS_FULL = {QB:'Quarterback', RB:'Running Back', WR:'Wide Receiver', TE:'Tight End', K:'Kicker', DST:'Defense'};
+
+const HYPE_OPENERS = ["Big time selection!", "Here we go!", "Oh, what a pick!", "Huge move right here!", "Get up, get up!", "Big name off the board!", "Let's go!", "Look out!"];
+const HYPE_CLOSERS = ["What a pick!", "Let's go!", "Huge get for this team!", "Great value right there!", "Love this pick!", "That's a steal!", "Fantastic addition!"];
+
+function shuffleArray(arr){
+  const a = [...arr];
+  for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
+// Shuffle-bag picker: cycles through every phrase once before any repeats, and avoids
+// the same line landing twice in a row even across a reshuffle boundary.
+const openerBag = []; let lastOpener = null;
+const closerBag = []; let lastCloser = null;
+function drawHype(bag, source, getLast, setLast){
+  if(bag.length===0){
+    const shuffled = shuffleArray(source);
+    if(shuffled.length>1 && shuffled[shuffled.length-1]===getLast()){
+      const swapIdx = Math.floor(Math.random()*(shuffled.length-1));
+      [shuffled[shuffled.length-1], shuffled[swapIdx]] = [shuffled[swapIdx], shuffled[shuffled.length-1]];
+    }
+    bag.push(...shuffled);
+  }
+  const val = bag.pop();
+  setLast(val);
+  return val;
+}
+function nextOpener(){ return drawHype(openerBag, HYPE_OPENERS, ()=>lastOpener, v=>lastOpener=v); }
+function nextCloser(){ return drawHype(closerBag, HYPE_CLOSERS, ()=>lastCloser, v=>lastCloser=v); }
+
+// Best-effort phonetic respellings for names TTS engines commonly botch. Editable in the Announcer settings.
+const PRONUNCIATION_BUILTIN = {
+  "Jahmyr Gibbs":"JAH-meer Gibbs",
+  "Ja'Marr Chase":"Juh-Mar Chase",
+  "Puka Nacua":"POO-kuh nuh-KOO-uh",
+  "Jaxon Smith-Njigba":"Jackson Smith en-JIG-buh",
+  "De'Von Achane":"Duh-VAHN AY-chan",
+  "Amon-Ra St. Brown":"Ah-mon Ruh Saint Brown",
+  "Bijan Robinson":"Bee-Jahn Robinson",
+  "Saquon Barkley":"SAY-kwon Barkley",
+  "CeeDee Lamb":"SEE-dee Lamb",
+  "Travis Etienne Jr.":"Travis ee-tee-EN Junior",
+  "Ashton Jeanty":"Ashton Zhahn-tee",
+  "Tetairoa McMillan":"Teh-tie-roh-uh McMillan",
+  "Cam Skattebo":"Cam Skat-uh-bo",
+  "D'Andre Swift":"Dee-Ahn-dray Swift",
+  "Emeka Egbuka":"Eh-meh-kah Eg-boo-kah",
+  "Bhayshul Tuten":"Buh-shool Too-ten",
+  "TreVeyon Henderson":"Truh-vay-on Henderson",
+  "Rome Odunze":"Rome Oh-dun-zay",
+  "Malik Nabers":"Malik Nay-bers",
+  "Kyle Monangai":"Kyle Moh-nan-guy",
+  "Isiah Pacheco":"Isiah Puh-check-oh",
+  "Adonai Mitchell":"Uh-doh-nye Mitchell",
+  "DeVaughn Vele":"Duh-Vawn Vell",
+  "Jerry Jeudy":"Jerry JOO-dee",
+  "Sam LaPorta":"Sam Luh-por-tuh",
+  "Juwan Johnson":"Joo-wahn Johnson",
+  "Oronde Gadsden II":"Oh-RON-day Gadsden the second",
+  "Zach Charbonnet":"Zach Shar-buh-nay",
+  "Ka'imi Fairbairn":"kuh-EE-mee Fair-burn",
+  "Chig Okonkwo":"Chig Oh-kon-kwoh",
+  "Isaac TeSlaa":"Isaac Tuh-slah",
+  "Rashid Shaheed":"Rah-sheed Shah-heed",
+  "Wan'Dale Robinson":"Wahn-Dale Robinson",
+  "Xavier Worthy":"Zave-ee-er Worthy",
+  "Deebo Samuel":"Dee-bo Samuel",
+  "Terry McLaurin":"Terry mick-LAW-rin",
+  "Evan McPherson":"Evan mick-FEAR-suhn",
+  "Younghoe Koo":"YOUNG-way Koo"
+};
+
+/* ============================= STORAGE ============================= */
+const K_SETUP='ff-draft-setup-v1', K_PICKS='ff-draft-picks-v1', K_CUSTOM='ff-draft-custom-v1';
+
+async function sGet(key){
+  try{ const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : null; }
+  catch(e){ return null; }
+}
+async function sSet(key,val){
+  try{ localStorage.setItem(key, JSON.stringify(val)); }
+  catch(e){ console.error('storage set failed', e); }
+}
+async function sDel(key){
+  try{ localStorage.removeItem(key); }catch(e){}
+}
+
+/* ============================= REMOTE DRAFT (Firebase) ============================= */
+// Commissioner: paste your Firebase config here to bake a working connection into every
+// copy of this file (so players don't have to configure anything). Leave as null to require
+// each device to connect manually via the Remote Draft settings instead.
+const FIREBASE_CONFIG = null;
+// Example: const FIREBASE_CONFIG = { apiKey:"AIza...", databaseURL:"https://your-project-default-rtdb.firebaseio.com", projectId:"your-project" };
+
+const urlParams = new URLSearchParams(location.search);
+const teamParamRaw = urlParams.get('team');
+const teamParamNum = teamParamRaw ? parseInt(teamParamRaw, 10) : NaN;
+const myTeamIdx = Number.isInteger(teamParamNum) ? teamParamNum - 1 : null; // 0-based, or null = commissioner
+const isCommissioner = myTeamIdx === null;
+
+let fbApp = null, fbDb = null, remoteMode = false;
+let remoteConfig = null;
+
+function getStoredFirebaseConfig(){
+  try{ const raw = localStorage.getItem('ff-firebase-config'); return raw ? JSON.parse(raw) : null; }
+  catch(e){ return null; }
+}
+function effectiveFirebaseConfig(){
+  return FIREBASE_CONFIG || getStoredFirebaseConfig();
+}
+
+function connectFirebase(config){
+  if(!config || !config.apiKey || !config.databaseURL) return false;
+  try{
+    if(!fbApp){ fbApp = firebase.initializeApp(config); }
+    fbDb = firebase.database();
+    remoteMode = true;
+    remoteConfig = config;
+    subscribeRemote();
+    return true;
+  }catch(e){
+    console.error('Firebase connect failed', e);
+    remoteMode = false;
+    return false;
+  }
+}
+
+function subscribeRemote(){
+  fbDb.ref('draft/setup').on('value', snap=>{
+    const val = snap.val();
+    if(val && val.started){ setup = val; onRemoteDataChange(); }
+    else if(!val){ setup = null; onRemoteDataChange(); }
+  });
+  fbDb.ref('draft/picks').on('value', snap=>{
+    const val = snap.val();
+    picks = val ? Object.values(val) : [];
+    onRemoteDataChange();
+  });
+  fbDb.ref('draft/customPlayers').on('value', snap=>{
+    const val = snap.val();
+    customPlayers = val ? Object.values(val) : [];
+    if(setup) renderPool();
+  });
+}
+
+// Called whenever setup or picks change, whether from this device or another one.
+let lastRenderedPickCount = -1;
+function onRemoteDataChange(){
+  if(!setup || !setup.started){
+    if(!isCommissioner){ showWaitingScreen(); }
+    return;
+  }
+  if(document.getElementById('draft').style.display !== 'block'){
+    showDraftScreen(true); // true = skip local timer/jingle kickoff; just render
+  } else {
+    renderAll();
+  }
+  if(picks.length !== lastRenderedPickCount){
+    const advanced = picks.length > lastRenderedPickCount && lastRenderedPickCount >= 0;
+    lastRenderedPickCount = picks.length;
+    if(advanced){
+      const lastPick = picks[picks.length-1];
+      const player = allPlayers().find(p=>p.id===lastPick.playerId);
+      if(player){
+        playPickSound(player.pos);
+        speakPickAnnouncement(setup.teamNames[lastPick.teamIdx], player);
+      }
+    }
+    if(isCommissioner) startTimerForCurrentPick();
+  }
+  renderRoleBanner();
+}
+
+async function remoteSaveSetup(s){ await fbDb.ref('draft/setup').set(s); }
+async function remoteDeleteAll(){
+  await fbDb.ref('draft').remove();
+}
+async function remoteSaveCustomPlayers(list){ await fbDb.ref('draft/customPlayers').set(list); }
+
+// Atomic pick write — protects against two people clicking at the exact same instant.
+// Aborts (does nothing) if the pick slot was already filled by someone else.
+function remoteDraftTransaction(expectedIdx, pickObj){
+  return fbDb.ref('draft/picks').transaction(current=>{
+    const arr = current ? Object.values(current) : [];
+    if(arr.length !== expectedIdx) return; // someone beat us to it — abort, no changes
+    arr.push(pickObj);
+    return arr;
+  });
+}
+function remoteUndoTransaction(){
+  return fbDb.ref('draft/picks').transaction(current=>{
+    const arr = current ? Object.values(current) : [];
+    arr.pop();
+    return arr;
+  });
+}
+
+function generateShareLinks(){
+  const base = location.origin + location.pathname;
+  document.getElementById('linkCommish').value = base;
+  const names = (setup && setup.teamNames) || (document.getElementById('teamGrid') ? currentTeamNamesFromInputs() : DEFAULT_TEAM_NAMES);
+  const el = document.getElementById('teamLinksList');
+  el.innerHTML = names.map((name,i)=>`
+    <div class="link-row">
+      <span class="lr-label">${i+1}</span>
+      <span class="lr-name">${escapeHtml(name)}</span>
+      <input type="text" readonly value="${base}?team=${i+1}" data-linkidx="${i+1}">
+      <button class="lr-copy" data-copylink="${i+1}">Copy</button>
+    </div>`).join('');
+}
+
+function openRemoteModal(){
+  const cfg = effectiveFirebaseConfig();
+  document.getElementById('connStatus').className = 'conn-status ' + (remoteMode ? 'on' : 'off');
+  document.getElementById('connStatus').textContent = remoteMode ? '● Connected' : '● Not connected';
+  document.getElementById('remoteConfigFields').style.display = remoteMode ? 'none' : 'block';
+  document.getElementById('remoteLinks').style.display = remoteMode ? 'block' : 'none';
+  if(cfg && !remoteMode){
+    document.getElementById('fbApiKey').value = cfg.apiKey || '';
+    document.getElementById('fbDbUrl').value = cfg.databaseURL || '';
+    document.getElementById('fbProjectId').value = cfg.projectId || '';
+  }
+  if(remoteMode) generateShareLinks();
+  document.getElementById('remoteModal').style.display = 'flex';
+}
+function closeRemoteModal(){ document.getElementById('remoteModal').style.display = 'none'; }
+
+function handleFirebaseConnect(){
+  const config = {
+    apiKey: document.getElementById('fbApiKey').value.trim(),
+    databaseURL: document.getElementById('fbDbUrl').value.trim(),
+    projectId: document.getElementById('fbProjectId').value.trim()
+  };
+  if(!config.apiKey || !config.databaseURL){
+    alert('API Key and Database URL are both required.');
+    return;
+  }
+  const ok = connectFirebase(config);
+  if(ok){
+    localStorage.setItem('ff-firebase-config', JSON.stringify(config));
+    openRemoteModal();
+  } else {
+    alert('Could not connect. Double check the API Key and Database URL.');
+  }
+}
+function handleFirebaseDisconnect(){
+  if(!confirm('Disconnect remote draft? Everyone will go back to local-only mode on their own device.')) return;
+  if(fbDb){ fbDb.ref('draft').off(); }
+  remoteMode = false;
+  closeRemoteModal();
+}
+
+function showWaitingScreen(){
+  document.getElementById('setup').style.display='none';
+  document.getElementById('draft').style.display='none';
+  document.getElementById('waitingSub').textContent = isCommissioner
+    ? "Waiting for the draft to start."
+    : `Waiting for the commissioner to start the draft. You're set up as Team ${myTeamIdx+1} — this page will jump in automatically once it begins.`;
+  document.getElementById('waitingScreen').style.display='block';
+  renderRoleBanner();
+}
+
+function renderRoleBanner(){
+  const el = document.getElementById('roleBanner');
+  if(!remoteMode || isCommissioner){ el.style.display='none'; return; }
+  el.style.display='block';
+  const teamName = (setup && setup.teamNames && setup.teamNames[myTeamIdx]) || `Team ${myTeamIdx+1}`;
+  if(setup && setup.started && !isComplete()){
+    const {teamIdx} = snakeTeamForPick(currentPickIdx(), setup.order);
+    const myTurn = teamIdx === myTeamIdx;
+    el.className = 'role-banner' + (myTurn ? ' your-turn' : '');
+    el.textContent = myTurn ? `🏈 IT'S YOUR TURN — drafting for ${teamName}` : `You're drafting for: ${teamName}`;
+  } else {
+    el.className = 'role-banner';
+    el.textContent = `You're drafting for: ${teamName}`;
+  }
+}
+
+/* ============================= STATE ============================= */
+let setup = null;      // {teamNames, order, rounds}
+let picks = [];        // [{overall, teamIdx, playerId}]
+let customPlayers = [];
+let posFilter = 'ALL';
+let searchQuery = '';
+let showDrafted = false;
+let completeView = 'grades'; // 'grades' | 'board' — which panel shows once the draft is done
+
+/* ---- timer / audio state ---- */
+let timerRemaining = null;
+let timerHandle = null;
+let timerPaused = false;
+let soundOn = (localStorage.getItem('ff-sound-muted') !== '1');
+let audioCtx = null;
+let leagueTitle = localStorage.getItem('ff-league-title') || 'Greenbrier Fantasy Football Draft 2026';
+let voicesList = [];
+let selectedVoiceURI = localStorage.getItem('ff-voice-uri') || '';
+let ttsProvider = localStorage.getItem('ff-tts-provider') || 'browser';
+let elevenApiKey = localStorage.getItem('ff-eleven-key') || '';
+let elevenVoiceId = localStorage.getItem('ff-eleven-voice') || '';
+let currentAudio = null;
+let customPronunciations = {};
+try{ customPronunciations = JSON.parse(localStorage.getItem('ff-pronunciation-overrides')||'{}'); }catch(e){ customPronunciations = {}; }
+
+function escapeHtml(s){
+  const d = document.createElement('div'); d.textContent = s; return d.innerHTML;
+}
+function renderMasthead(){
+  document.getElementById('mastheadTitle').innerHTML = escapeHtml(leagueTitle);
+}
+function editMasthead(){
+  const val = prompt('League name:', leagueTitle);
+  if(val && val.trim()){
+    leagueTitle = val.trim();
+    localStorage.setItem('ff-league-title', leagueTitle);
+    renderMasthead();
+  }
+}
+
+function effectivePron(name){
+  return customPronunciations[name] || PRONUNCIATION_BUILTIN[name] || name;
+}
+
+function loadVoices(){
+  voicesList = speechSynthesis.getVoices();
+  if(!selectedVoiceURI && voicesList.length){
+    const preferred = voicesList.find(v=>/en/i.test(v.lang) && /Natural|Neural|Enhanced|Premium/i.test(v.name))
+      || voicesList.find(v=>/en-US/i.test(v.lang) && !/Compact/i.test(v.name))
+      || voicesList.find(v=>/en/i.test(v.lang))
+      || voicesList[0];
+    if(preferred) selectedVoiceURI = preferred.voiceURI;
+  }
+  if(document.getElementById('voiceSelect')) populateVoiceSelect();
+}
+if('speechSynthesis' in window){
+  speechSynthesis.onvoiceschanged = loadVoices;
+  loadVoices();
+}
+
+function getSelectedVoice(){
+  return voicesList.find(v=>v.voiceURI===selectedVoiceURI) || voicesList[0] || null;
+}
+
+function speakBrowser(text){
+  if(!('speechSynthesis' in window) || !text) return;
+  if(currentAudio){ currentAudio.pause(); currentAudio = null; }
+  speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.rate = 0.95; utter.pitch = 0.82; utter.volume = 1;
+  const v = getSelectedVoice(); if(v) utter.voice = v;
+  speechSynthesis.speak(utter);
+}
+
+async function elevenLabsTTS(key, voiceId, text){
+  if(!key || !voiceId) throw new Error('Missing API key or voice ID');
+  if(currentAudio){ currentAudio.pause(); currentAudio = null; }
+  if('speechSynthesis' in window) speechSynthesis.cancel();
+  const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`, {
+    method: 'POST',
+    headers: {
+      'xi-api-key': key,
+      'Content-Type': 'application/json',
+      'Accept': 'audio/mpeg'
+    },
+    body: JSON.stringify({
+      text,
+      model_id: 'eleven_turbo_v2_5',
+      voice_settings: { stability: 0.28, similarity_boost: 0.8, style: 0.65, use_speaker_boost: true }
+    })
+  });
+  if(!res.ok){
+    const errText = await res.text().catch(()=>'');
+    throw new Error(`ElevenLabs error ${res.status}: ${errText.slice(0,200)}`);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const audio = new Audio(url);
+  currentAudio = audio;
+  audio.onended = ()=>{ URL.revokeObjectURL(url); if(currentAudio===audio) currentAudio=null; };
+  await audio.play();
+}
+
+// Used by Test buttons in the modal — reads whatever is currently typed in the fields,
+// even before Save is clicked, so the person can preview before committing.
+function testSpeak(text){
+  const providerSel = document.getElementById('ttsProviderSelect');
+  const provider = providerSel ? providerSel.value : ttsProvider;
+  if(provider === 'elevenlabs'){
+    const key = document.getElementById('elevenKeyInput').value.trim();
+    const voiceId = document.getElementById('elevenVoiceInput').value.trim();
+    elevenLabsTTS(key, voiceId, text).catch(err=>{
+      alert('ElevenLabs test failed: ' + err.message + '\n\nFalling back to browser voice.');
+      speakBrowser(text);
+    });
+  } else {
+    speakBrowser(text);
+  }
+}
+
+// Used during the actual draft — always uses the saved (committed) settings.
+function speakPickAnnouncement(fantasyTeamName, player){
+  if(!soundOn) return;
+  const posFull = POS_FULL[player.pos] || player.pos;
+  const nflTeam = player.team ? TEAM_FULL[player.team] : null;
+  const spokenName = effectivePron(player.name);
+  let text;
+  if(player.pos === 'DST'){
+    text = `${nextOpener()} Drafted by the ${fantasyTeamName}, welcome, the ${nflTeam || player.name} defense! ${nextCloser()}`;
+  } else {
+    text = `${nextOpener()} Drafted by the ${fantasyTeamName}` + (nflTeam ? `, from the ${nflTeam}` : '') + `, welcome, ${posFull}, ${spokenName}! ${nextCloser()}`;
+  }
+  if(ttsProvider === 'elevenlabs' && elevenApiKey && elevenVoiceId){
+    elevenLabsTTS(elevenApiKey, elevenVoiceId, text).catch(err=>{
+      console.error('ElevenLabs failed, falling back to browser voice:', err);
+      speakBrowser(text);
+    });
+  } else {
+    speakBrowser(text);
+  }
+}
+
+function populateVoiceSelect(){
+  const sel = document.getElementById('voiceSelect');
+  if(!sel) return;
+  sel.innerHTML = voicesList.map(v=>`<option value="${v.voiceURI}" ${v.voiceURI===selectedVoiceURI?'selected':''}>${escapeHtml(v.name)} — ${v.lang}</option>`).join('')
+    || '<option value="">No voices found on this browser</option>';
+}
+
+function toggleProviderFields(){
+  const provider = document.getElementById('ttsProviderSelect').value;
+  document.getElementById('elevenFields').style.display = provider === 'elevenlabs' ? 'block' : 'none';
+  document.getElementById('browserVoiceField').style.display = provider === 'browser' ? 'block' : 'none';
+}
+
+function openAnnouncerModal(){
+  voicesList = speechSynthesis.getVoices();
+  populateVoiceSelect();
+  renderPronList('');
+  document.getElementById('ttsProviderSelect').value = ttsProvider;
+  document.getElementById('elevenKeyInput').value = elevenApiKey;
+  document.getElementById('elevenVoiceInput').value = elevenVoiceId;
+  toggleProviderFields();
+  document.getElementById('announcerModal').style.display='flex';
+}
+function closeAnnouncerModal(){ document.getElementById('announcerModal').style.display='none'; }
+
+function renderPronList(query){
+  const q = (query||'').trim().toLowerCase();
+  const players = allPlayers().filter(p=>p.pos!=='DST' && p.name.toLowerCase().includes(q)).slice(0,80);
+  const el = document.getElementById('pronList');
+  el.innerHTML = players.length ? players.map(p=>`
+    <div class="pron-row">
+      <span class="pn-name">${escapeHtml(p.name)}</span>
+      <input type="text" data-name="${encodeURIComponent(p.name)}" value="${escapeHtml(effectivePron(p.name))}">
+      <button class="pn-test" data-testname="${encodeURIComponent(p.name)}">▶</button>
+    </div>`).join('') : `<div class="empty-note">No matches.</div>`;
+}
+
+function saveAnnouncerSettings(){
+  ttsProvider = document.getElementById('ttsProviderSelect').value;
+  elevenApiKey = document.getElementById('elevenKeyInput').value.trim();
+  elevenVoiceId = document.getElementById('elevenVoiceInput').value.trim();
+  localStorage.setItem('ff-tts-provider', ttsProvider);
+  localStorage.setItem('ff-eleven-key', elevenApiKey);
+  localStorage.setItem('ff-eleven-voice', elevenVoiceId);
+  localStorage.setItem('ff-voice-uri', selectedVoiceURI);
+  document.querySelectorAll('#pronList input').forEach(inp=>{
+    const name = decodeURIComponent(inp.dataset.name);
+    const val = inp.value.trim();
+    if(val && val!==name){ customPronunciations[name] = val; }
+    else { delete customPronunciations[name]; }
+  });
+  localStorage.setItem('ff-pronunciation-overrides', JSON.stringify(customPronunciations));
+  closeAnnouncerModal();
+}
+
+function allPlayers(){ return [...BASE_POOL, ...customPlayers]; }
+function draftedIds(){ return new Set(picks.map(p=>p.playerId)); }
+
+function snakeTeamForPick(overallIdx, order){ // overallIdx: 0-based
+  const round = Math.floor(overallIdx/10);
+  const slot = overallIdx%10;
+  const seq = (round%2===0) ? order : [...order].reverse();
+  return {round: round+1, slotInRound: slot+1, teamIdx: seq[slot]};
+}
+
+/* ============================= TIMER + AUDIO ============================= */
+function ensureAudio(){
+  if(!audioCtx){
+    try{ audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return; }
+  }
+  if(audioCtx && audioCtx.state==='suspended'){ audioCtx.resume(); }
+}
+
+function beep(freq, duration=0.12, type='sine', volume=0.25){
+  if(!soundOn || !audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type; osc.frequency.value = freq;
+  gain.gain.value = volume;
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.start();
+  gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+  osc.stop(audioCtx.currentTime + duration + 0.03);
+}
+
+function tickSound(remaining){
+  if(remaining<=0){ beep(220, 0.45, 'sawtooth', 0.35); return; }
+  if(remaining<=5){ beep(880,0.1,'square',0.3); setTimeout(()=>beep(880,0.1,'square',0.3), 130); }
+  else if(remaining<=10){ beep(660,0.12,'triangle',0.24); }
+  else if(remaining<=15){ beep(440,0.1,'sine',0.16); }
+}
+
+function playPickSound(pos){
+  if(!soundOn || !audioCtx) return;
+  switch(pos){
+    case 'QB': beep(330,0.14,'sine',0.22); setTimeout(()=>beep(415,0.18,'sine',0.24),120); setTimeout(()=>beep(494,0.2,'sine',0.22),260); break;
+    case 'RB': beep(180,0.14,'square',0.28); setTimeout(()=>beep(150,0.16,'square',0.24),90); break;
+    case 'WR': beep(900,0.07,'sine',0.2); setTimeout(()=>beep(1200,0.08,'sine',0.22),80); break;
+    case 'TE': beep(500,0.16,'triangle',0.22); break;
+    case 'K': beep(1200,0.09,'sine',0.16); break;
+    case 'DST': beep(140,0.28,'sawtooth',0.28); break;
+    default: beep(440,0.12,'sine',0.2);
+  }
+}
+
+function clockJingle(){
+  if(!soundOn || !audioCtx) return;
+  beep(523,0.11,'sine',0.18);
+  setTimeout(()=>beep(659,0.16,'sine',0.2), 140);
+}
+
+function clearTimerHandle(){ if(timerHandle){ clearInterval(timerHandle); timerHandle=null; } }
+
+function startTimerForCurrentPick(){
+  clearTimerHandle();
+  if(!isComplete()){ clockJingle(); }
+  if(!setup || !setup.timerSeconds || setup.timerSeconds<=0 || isComplete()){
+    timerRemaining = null; timerPaused = false; renderTimer(); return;
+  }
+  timerRemaining = setup.timerSeconds;
+  timerPaused = false;
+  renderTimer();
+  timerHandle = setInterval(timerTick, 1000);
+}
+
+function timerTick(){
+  if(timerPaused) return;
+  timerRemaining -= 1;
+  if(timerRemaining<=15 && timerRemaining>=0){ tickSound(timerRemaining); }
+  if(timerRemaining<=0){ timerRemaining = 0; clearTimerHandle(); }
+  renderTimer();
+}
+
+function resetTimer(){
+  if(!setup || !setup.timerSeconds) return;
+  clearTimerHandle();
+  timerRemaining = setup.timerSeconds;
+  timerPaused = false;
+  renderTimer();
+  timerHandle = setInterval(timerTick, 1000);
+}
+
+function extendTimer(sec){
+  if(timerRemaining==null) return;
+  timerRemaining += sec;
+  renderTimer();
+  if(!timerHandle && !isComplete()){ timerHandle = setInterval(timerTick, 1000); }
+}
+
+function togglePauseTimer(){
+  if(timerRemaining==null) return;
+  timerPaused = !timerPaused;
+  renderTimer();
+}
+
+function toggleSound(){
+  soundOn = !soundOn;
+  localStorage.setItem('ff-sound-muted', soundOn ? '0' : '1');
+  renderTimer();
+}
+
+function formatTime(s){
+  if(s==null) return '--';
+  const m = Math.floor(s/60), sec = s%60;
+  return m>0 ? (m+':'+String(sec).padStart(2,'0')) : String(sec);
+}
+
+function renderTimer(){
+  const block = document.getElementById('timerBlock');
+  const hero = document.querySelector('.hero');
+  if(!block) return;
+  const active = setup && setup.timerSeconds>0 && !isComplete();
+  block.style.display = active ? 'flex' : 'none';
+  if(!active){ hero.classList.remove('hero-critical'); return; }
+
+  const digits = document.getElementById('timerDigits');
+  digits.textContent = formatTime(timerRemaining);
+  digits.classList.remove('tier-warn','tier-urgent');
+  if(timerRemaining!=null && timerRemaining<=5) digits.classList.add('tier-urgent');
+  else if(timerRemaining!=null && timerRemaining<=15) digits.classList.add('tier-warn');
+
+  hero.classList.toggle('hero-critical', timerRemaining!=null && timerRemaining<=5);
+  document.getElementById('timerPauseBtn').textContent = timerPaused ? '▶' : '⏸';
+  document.getElementById('timerMuteBtn').textContent = soundOn ? '🔊' : '🔇';
+}
+
+/* ============================= SETUP SCREEN ============================= */
+function buildTeamGrid(container, names){
+  container.innerHTML='';
+  names.forEach((name,i)=>{
+    const row = document.createElement('div');
+    row.className='team-input';
+    row.innerHTML = `<span class="slot-label">${i+1}</span><div class="swatch" style="background:${TEAM_COLORS[i]}"></div><input type="text" data-idx="${i}" value="${name}">`;
+    container.appendChild(row);
+  });
+}
+
+const DEFAULT_TEAM_NAMES = [
+  "Greenbrier Grecian Thunder",
+  "Channel 4 News Team",
+  "Thors Hammer",
+  "Wascally Wabbits",
+  "WILDCARD!",
+  "I'm the Bottom now",
+  "LFGM",
+  "RB's are overrated",
+  "Win Diesel",
+  "Shenanigans"
+];
+
+function renderTeamGrid(){
+  const names = (setup && setup.teamNames) || DEFAULT_TEAM_NAMES;
+  buildTeamGrid(document.getElementById('teamGrid'), names);
+}
+
+function openEditTeams(){
+  buildTeamGrid(document.getElementById('editTeamGrid'), setup.teamNames);
+  document.getElementById('editTeamsModal').style.display='flex';
+}
+function closeEditTeams(){
+  document.getElementById('editTeamsModal').style.display='none';
+}
+async function saveEditTeams(){
+  if(!isCommissioner) return;
+  const names = Array.from(document.querySelectorAll('#editTeamGrid input')).map(inp=>inp.value.trim() || ('Team '+(+inp.dataset.idx+1)));
+  setup.teamNames = names;
+  if(remoteMode){ await remoteSaveSetup(setup); }
+  else { await sSet(K_SETUP, setup); }
+  closeEditTeams();
+  renderAll();
+}
+
+function currentTeamNamesFromInputs(){
+  return Array.from(document.querySelectorAll('#teamGrid input')).map(inp=>inp.value.trim() || ('Team '+(+inp.dataset.idx+1)));
+}
+
+function shuffleOrder(){
+  const order = [...Array(10).keys()];
+  for(let i=order.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [order[i],order[j]]=[order[j],order[i]]; }
+  return order;
+}
+
+async function startDraft(){
+  if(!isCommissioner) return;
+  ensureAudio();
+  const teamNames = currentTeamNamesFromInputs();
+  const rounds = parseInt(document.getElementById('roundsSelect').value);
+  const timerSeconds = Math.max(0, parseInt(document.getElementById('timerInput').value) || 0);
+  const order = window._pendingOrder || [...Array(10).keys()];
+  setup = {teamNames, order, rounds, timerSeconds, started:true};
+  picks = [];
+  customPlayers = [];
+  if(remoteMode){
+    lastRenderedPickCount = 0;
+    await remoteSaveSetup(setup);
+    await fbDb.ref('draft/picks').set([]);
+    await remoteSaveCustomPlayers(customPlayers);
+    // subscribeRemote's listeners will drive the screen switch + render
+  } else {
+    await sSet(K_SETUP, setup);
+    await sSet(K_PICKS, picks);
+    await sSet(K_CUSTOM, customPlayers);
+    showDraftScreen();
+  }
+}
+
+/* ============================= DRAFT SCREEN ============================= */
+function totalPicks(){ return setup.rounds*10; }
+function currentPickIdx(){ return picks.length; }
+function isComplete(){ return currentPickIdx() >= totalPicks(); }
+
+function renderPosTabs(){
+  const tabs = ['ALL','QB','RB','WR','TE','K','DST'];
+  const el = document.getElementById('posTabs');
+  el.innerHTML = tabs.map(t=>`<button class="pos-tab ${t===posFilter?'active':''}" data-pos="${t}">${t}</button>`).join('');
+}
+
+function renderHero(){
+  const idx = currentPickIdx();
+  if(isComplete()){
+    document.getElementById('clockTag').textContent = 'Draft complete';
+    document.getElementById('clockTag').style.color = 'var(--turf)';
+    document.getElementById('clockTag').style.borderColor = 'rgba(60,203,111,0.4)';
+    document.getElementById('clockTag').style.background = 'var(--turf-dim)';
+    document.getElementById('heroTeam').textContent = '🏆 All picks in';
+    document.getElementById('metricPick').textContent = totalPicks();
+    document.getElementById('metricRound').textContent = setup.rounds;
+    document.getElementById('metricSlot').textContent = '—';
+    document.getElementById('heroNext').innerHTML = '';
+  } else {
+    const {round, slotInRound, teamIdx} = snakeTeamForPick(idx, setup.order);
+    document.getElementById('heroTeam').textContent = setup.teamNames[teamIdx];
+    document.getElementById('heroTeam').style.color = TEAM_COLORS[teamIdx];
+    document.getElementById('metricPick').textContent = idx+1;
+    document.getElementById('metricRound').textContent = round;
+    document.getElementById('metricSlot').textContent = slotInRound;
+
+    const nextEl = document.getElementById('heroNext');
+    let chips = '<span class="lbl">Up next</span>';
+    for(let n=1;n<=3;n++){
+      const ni = idx+n;
+      if(ni>=totalPicks()) break;
+      const info = snakeTeamForPick(ni, setup.order);
+      chips += `<div class="next-chip"><span class="sw" style="background:${TEAM_COLORS[info.teamIdx]}"></span>${setup.teamNames[info.teamIdx]}</div>`;
+    }
+    nextEl.innerHTML = chips;
+  }
+  document.getElementById('progressFill').style.width = Math.min(100, (idx/totalPicks())*100)+'%';
+}
+
+function playerLastName(name){
+  const parts = name.split(' ');
+  return parts[parts.length-1];
+}
+
+function renderBoard(){
+  const table = document.getElementById('boardTable');
+  const idx = currentPickIdx();
+  let head = '<tr><th></th>' + setup.order.map((_,i)=>i).map(()=>'').join('');
+  // header uses original team order (columns fixed = team index order 0..9, displayed by their draft slot position for round1)
+  let cols = [...Array(10).keys()]; // column j corresponds to teamIdx j (fixed columns), simpler for scanability
+  let headHtml = '<tr><th></th>' + cols.map(teamIdx=>`<th><span class="tname">${setup.teamNames[teamIdx]}</span><div class="bar" style="background:${TEAM_COLORS[teamIdx]}"></div></th>`).join('') + '</tr>';
+
+  let bodyHtml = '';
+  for(let r=0;r<setup.rounds;r++){
+    const dir = (r%2===0) ? '▸' : '◂';
+    bodyHtml += `<tr><td class="rnd">R${r+1}<span class="chev">${dir}</span></td>`;
+    for(let c=0;c<10;c++){
+      const teamIdx = c;
+      // find pick overall index for this round & team
+      const seq = (r%2===0) ? setup.order : [...setup.order].reverse();
+      const slot = seq.indexOf(teamIdx);
+      const overall = r*10 + slot;
+      const pick = picks[overall];
+      if(pick){
+        const p = allPlayers().find(pl=>pl.id===pick.playerId);
+        bodyHtml += `<td class="cell-pick" style="color:${TEAM_COLORS[teamIdx]}"><span class="pos">${p?p.pos:'?'}</span>${p?playerLastName(p.name):'?'}</td>`;
+      } else if(overall === idx && !isComplete()){
+        bodyHtml += `<td class="cell-onclock">ON CLOCK</td>`;
+      } else {
+        bodyHtml += `<td class="cell-empty">${r+1}.${String(slot+1).padStart(2,'0')}</td>`;
+      }
+    }
+    bodyHtml += '</tr>';
+  }
+  table.innerHTML = headHtml + bodyHtml;
+  document.getElementById('boardCount').textContent = `${idx}/${totalPicks()} picks made`;
+
+  // auto scroll to keep current round visible
+  const wrap = document.querySelector('.board-scroll');
+  if(!isComplete()){
+    const rowH = 38+2;
+    const round = Math.floor(idx/10);
+    wrap.scrollTop = Math.max(0, (round-2)*rowH);
+  }
+}
+
+function renderPool(){
+  const drafted = draftedIds();
+  const q = searchQuery.trim().toLowerCase();
+  const players = allPlayers();
+
+  const available = players.filter(p=>{
+    if(drafted.has(p.id)) return false;
+    if(posFilter!=='ALL' && p.pos!==posFilter) return false;
+    if(q && !p.name.toLowerCase().includes(q)) return false;
+    return true;
+  }).sort((a,b)=>{
+    if(a.rank==null && b.rank==null) return a.name.localeCompare(b.name);
+    if(a.rank==null) return 1;
+    if(b.rank==null) return -1;
+    return a.rank-b.rank;
+  });
+
+  const draftedList = players.filter(p=>{
+    if(!drafted.has(p.id)) return false;
+    if(posFilter!=='ALL' && p.pos!==posFilter) return false;
+    if(q && !p.name.toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  const complete = isComplete();
+  const notMyTurn = remoteMode && !isCommissioner && !complete && snakeTeamForPick(currentPickIdx(), setup.order).teamIdx !== myTeamIdx;
+  let html = '';
+  if(available.length===0){
+    html += `<div class="empty-note">No matching available players.</div>`;
+  } else {
+    html += available.map(p=>`
+      <div class="player-row">
+        <span class="player-rank">${p.rank ?? '—'}</span>
+        <span class="player-pos">${p.pos}</span>
+        <span class="player-name">${p.name}</span>
+        <span class="player-team">${p.team||''}</span>
+        <button class="draft-btn" data-draft="${p.id}" ${(complete||notMyTurn)?'disabled':''}>${notMyTurn?'Wait':'Draft'}</button>
+      </div>`).join('');
+  }
+
+  html += `<div class="drafted-toggle" id="draftedToggle"><span>Drafted (${draftedList.length})</span><span>${showDrafted?'▲ hide':'▼ show'}</span></div>`;
+  if(showDrafted){
+    const picksByPlayer = {};
+    picks.forEach(pk=>{ picksByPlayer[pk.playerId]=pk; });
+    html += draftedList.map(p=>{
+      const pk = picksByPlayer[p.id];
+      const teamName = pk? setup.teamNames[pk.teamIdx] : '';
+      return `<div class="player-row drafted-row">
+        <span class="player-rank">${p.rank ?? '—'}</span>
+        <span class="player-pos">${p.pos}</span>
+        <span class="player-name">${p.name}</span>
+        <span class="badge">${teamName}</span>
+      </div>`;
+    }).join('');
+  }
+
+  document.getElementById('poolList').innerHTML = html;
+  document.getElementById('poolCount').textContent = `${available.length} available`;
+}
+
+function computeGrades(){
+  const posKeys = ['QB','RB','WR','TE','K','DST'];
+  const teams = setup.teamNames.map((name,i)=>({
+    idx:i, name, color:TEAM_COLORS[i], picks:[],
+    posCounts:{QB:0,RB:0,WR:0,TE:0,K:0,DST:0}, valueSum:0, valueCount:0
+  }));
+  picks.forEach(pk=>{
+    const player = allPlayers().find(p=>p.id===pk.playerId);
+    if(!player) return;
+    const t = teams[pk.teamIdx];
+    t.picks.push({...pk, player});
+    if(t.posCounts[player.pos]!=null) t.posCounts[player.pos]++;
+    if(player.rank!=null){
+      t.valueSum += (pk.overall+1) - player.rank; // positive = got them later than their rank (value)
+      t.valueCount++;
+    }
+  });
+  const posAvg = {};
+  posKeys.forEach(pk=>{ posAvg[pk] = teams.reduce((s,t)=>s+t.posCounts[pk],0)/teams.length; });
+
+  teams.forEach(t=>{
+    t.avgValue = t.valueCount ? t.valueSum/t.valueCount : 0;
+    let strength=null, sDiff=-Infinity, weakness=null, wDiff=Infinity;
+    posKeys.forEach(pk=>{
+      const diff = t.posCounts[pk]-posAvg[pk];
+      if(diff>sDiff){ sDiff=diff; strength=pk; }
+      if(diff<wDiff){ wDiff=diff; weakness=pk; }
+    });
+    t.strength=strength; t.weakness=weakness;
+  });
+
+  const gradeLetters=['A+','A','A-','B+','B','B-','C+','C','C-','D','F'];
+  const sorted=[...teams].sort((a,b)=>b.avgValue-a.avgValue);
+  sorted.forEach((t,i)=>{
+    const pct = i/(sorted.length-1||1);
+    t.grade = gradeLetters[Math.min(gradeLetters.length-1, Math.floor(pct*gradeLetters.length))];
+  });
+  return teams;
+}
+
+function gradeBlurb(t){
+  let blurb = `Stacked at ${t.strength}`;
+  if(t.weakness && t.weakness!==t.strength) blurb += `, thin at ${t.weakness}`;
+  if(t.avgValue>5) blurb += ' — grabbed real value on the board.';
+  else if(t.avgValue<-5) blurb += ' — paid up early, but got the names they wanted.';
+  else blurb += ' — drafted roughly to the board.';
+  return blurb;
+}
+
+function renderGrades(){
+  const teams = computeGrades();
+  const el = document.getElementById('gradesScreen');
+  el.innerHTML = `
+    <div class="grades-head">
+      <h1 class="display">Draft Grades</h1>
+      <p>A lighthearted read on value and roster balance — just for bragging rights.</p>
+    </div>
+    <div class="grades-grid">
+      ${teams.map(t=>`
+        <div class="grade-card" style="border-color:${t.color}66;">
+          <div class="grade-card-top">
+            <div class="grade-letter" style="color:${t.color};">${t.grade}</div>
+            <div>
+              <div class="gt-name">${t.name}</div>
+              <div class="gt-sub">${t.picks.length} picks</div>
+            </div>
+          </div>
+          <div class="grade-blurb">${gradeBlurb(t)}</div>
+          <div class="grade-posrow">
+            ${['QB','RB','WR','TE','K','DST'].map(pk=>`<span class="pos-chip">${pk} ${t.posCounts[pk]}</span>`).join('')}
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function downloadCSV(){
+  const rows = [['Overall Pick','Round','Pick In Round','Team','Player','Position','NFL Team']];
+  picks.forEach(pk=>{
+    const round = Math.floor(pk.overall/10);
+    const seq = (round%2===0) ? setup.order : [...setup.order].reverse();
+    const slot = seq.indexOf(pk.teamIdx)+1;
+    const player = allPlayers().find(p=>p.id===pk.playerId);
+    rows.push([pk.overall+1, round+1, slot, setup.teamNames[pk.teamIdx], player?player.name:'', player?player.pos:'', player?player.team:'']);
+  });
+  const csv = rows.map(r=>r.map(v=>{
+    const s = String(v);
+    return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'draft-picks.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function renderTopButtons(){
+  const el = document.getElementById('topbtns');
+  let html = '';
+  if(isCommissioner){
+    html += `<button class="btn" id="editTeamsBtn">✏️ Edit teams</button>`;
+    html += `<button class="btn" id="announcerBtn">🗣️ Announcer</button>`;
+  }
+  html += `<button class="btn" id="exportBtn" ${picks.length===0?'disabled':''}>⬇ Export CSV</button>`;
+  if(isComplete()){
+    html += `<button class="btn" id="viewToggleBtn">${completeView==='grades' ? '📋 View board' : '🏆 View grades'}</button>`;
+  }
+  if(isCommissioner){
+    html += `<button class="btn" id="undoBtn" ${picks.length===0?'disabled':''}>↺ Undo last pick</button>`;
+    html += `<button class="btn danger" id="resetBtn">Reset draft</button>`;
+  }
+  el.innerHTML = html;
+  if(isCommissioner){
+    document.getElementById('editTeamsBtn').onclick = openEditTeams;
+    document.getElementById('announcerBtn').onclick = openAnnouncerModal;
+    document.getElementById('undoBtn').onclick = undoPick;
+    document.getElementById('resetBtn').onclick = resetDraft;
+  }
+  document.getElementById('exportBtn').onclick = downloadCSV;
+  const vt = document.getElementById('viewToggleBtn');
+  if(vt) vt.onclick = ()=>{ completeView = completeView==='grades' ? 'board' : 'grades'; renderAll(); };
+}
+
+function renderAll(){
+  renderTopButtons();
+  renderHero();
+  renderPosTabs();
+  renderPool();
+  if(isComplete() && completeView==='grades'){
+    document.getElementById('workspace').style.display='none';
+    document.getElementById('gradesScreen').style.display='block';
+    renderGrades();
+  } else {
+    document.getElementById('workspace').style.display='grid';
+    document.getElementById('gradesScreen').style.display='none';
+    renderBoard();
+  }
+}
+
+async function draftPlayer(playerId){
+  if(isComplete()) return;
+  const idx = currentPickIdx();
+  const {teamIdx} = snakeTeamForPick(idx, setup.order);
+  if(remoteMode && !isCommissioner && teamIdx !== myTeamIdx){
+    alert("It's not your turn yet — the board will update the moment it is.");
+    return;
+  }
+  const player = allPlayers().find(p=>p.id===playerId);
+  if(!player) return;
+  const pickObj = {overall: idx, teamIdx, playerId};
+
+  if(remoteMode){
+    try{ await remoteDraftTransaction(idx, pickObj); }
+    catch(e){ console.error('Draft transaction failed', e); }
+    // The 'draft/picks' listener (onRemoteDataChange) handles re-rendering, sound, and the timer.
+  } else {
+    picks.push(pickObj);
+    await sSet(K_PICKS, picks);
+    playPickSound(player.pos);
+    speakPickAnnouncement(setup.teamNames[teamIdx], player);
+    if(isComplete()){ completeView = 'grades'; }
+    renderAll();
+    startTimerForCurrentPick();
+  }
+}
+
+async function undoPick(){
+  if(picks.length===0) return;
+  if(remoteMode){
+    if(!isCommissioner) return;
+    await remoteUndoTransaction();
+  } else {
+    picks.pop();
+    await sSet(K_PICKS, picks);
+    renderAll();
+    startTimerForCurrentPick();
+  }
+}
+
+async function resetDraft(){
+  if(!isCommissioner) return;
+  if(!confirm('Reset the whole draft? This clears every pick and returns to setup.')) return;
+  clearTimerHandle();
+  if(remoteMode){
+    await remoteDeleteAll();
+    lastRenderedPickCount = -1;
+  } else {
+    await sDel(K_SETUP); await sDel(K_PICKS); await sDel(K_CUSTOM);
+  }
+  setup=null; picks=[]; customPlayers=[];
+  showSetupScreen();
+}
+
+async function addCustomPlayer(){
+  const nameInput = document.getElementById('customName');
+  const posSelect = document.getElementById('customPos');
+  const name = nameInput.value.trim();
+  if(!name) return;
+  const player = {id:'c-'+Date.now(), rank:null, name, team:'', pos:posSelect.value};
+  customPlayers.push(player);
+  if(remoteMode){ await remoteSaveCustomPlayers(customPlayers); }
+  else { await sSet(K_CUSTOM, customPlayers); }
+  nameInput.value='';
+  renderPool();
+}
+
+/* ============================= SCREEN SWITCHING ============================= */
+function showSetupScreen(){
+  document.getElementById('setup').style.display='block';
+  document.getElementById('draft').style.display='none';
+  document.getElementById('waitingScreen').style.display='none';
+  window._pendingOrder = [...Array(10).keys()];
+  renderTeamGrid();
+}
+function showDraftScreen(skipKickoff){
+  document.getElementById('setup').style.display='none';
+  document.getElementById('waitingScreen').style.display='none';
+  document.getElementById('draft').style.display='block';
+  renderAll();
+  if(!skipKickoff) startTimerForCurrentPick();
+}
+
+/* ============================= EVENTS ============================= */
+document.addEventListener('click', (e)=>{
+  ensureAudio();
+
+  const draftBtn = e.target.closest('[data-draft]');
+  if(draftBtn){ draftPlayer(draftBtn.dataset.draft); return; }
+
+  const posTab = e.target.closest('.pos-tab');
+  if(posTab){ posFilter = posTab.dataset.pos; renderPosTabs(); renderPool(); return; }
+
+  if(e.target.id==='draftedToggle' || e.target.closest('#draftedToggle')){ showDrafted=!showDrafted; renderPool(); return; }
+
+  if(e.target.id==='shuffleBtn'){ window._pendingOrder = shuffleOrder(); flashShuffled(); return; }
+  if(e.target.id==='startBtn'){ startDraft(); return; }
+  if(e.target.id==='customAddBtn'){ addCustomPlayer(); return; }
+
+  const presetChip = e.target.closest('.preset-chip');
+  if(presetChip){
+    document.getElementById('timerInput').value = presetChip.dataset.t;
+    document.querySelectorAll('.preset-chip').forEach(c=>c.classList.toggle('active', c===presetChip));
+    return;
+  }
+
+  if(e.target.id==='timerPauseBtn'){ togglePauseTimer(); return; }
+  if(e.target.id==='timerResetBtn'){ resetTimer(); return; }
+  if(e.target.id==='timerExtendBtn'){ extendTimer(10); return; }
+  if(e.target.id==='timerMuteBtn'){ toggleSound(); return; }
+
+  if(e.target.id==='editTeamsClose'){ closeEditTeams(); return; }
+  if(e.target.id==='editTeamsSave'){ saveEditTeams(); return; }
+  if(e.target.id==='editTeamsModal'){ closeEditTeams(); return; } // click on backdrop
+
+  if(e.target.id==='mastheadEdit'){ editMasthead(); return; }
+
+  if(e.target.id==='announcerClose'){ closeAnnouncerModal(); return; }
+  if(e.target.id==='announcerModal'){ closeAnnouncerModal(); return; } // backdrop
+  if(e.target.id==='voiceTestBtn'){
+    testSpeak(`${nextOpener()} Drafted by the Test Squad, from the Detroit Lions, welcome, Running Back, ${effectivePron('Jahmyr Gibbs')}! ${nextCloser()}`);
+    return;
+  }
+  if(e.target.id==='pronSaveBtn'){ saveAnnouncerSettings(); return; }
+  const testBtn = e.target.closest('.pn-test');
+  if(testBtn){
+    const row = testBtn.closest('.pron-row');
+    testSpeak(row.querySelector('input').value);
+    return;
+  }
+
+  if(e.target.id==='remoteClose'){ closeRemoteModal(); return; }
+  if(e.target.id==='remoteModal'){ closeRemoteModal(); return; } // backdrop
+  if(e.target.id==='fbConnectBtn'){ handleFirebaseConnect(); return; }
+  if(e.target.id==='fbDisconnectBtn'){ handleFirebaseDisconnect(); return; }
+  if(e.target.id==='linkCommish' || e.target.closest('[data-copy="linkCommish"]')){
+    const inp = document.getElementById('linkCommish');
+    inp.select(); document.execCommand ? document.execCommand('copy') : navigator.clipboard.writeText(inp.value);
+    return;
+  }
+  const copyBtn = e.target.closest('[data-copylink]');
+  if(copyBtn){
+    const idx = copyBtn.dataset.copylink;
+    const inp = document.querySelector(`input[data-linkidx="${idx}"]`);
+    if(inp){
+      inp.select();
+      if(navigator.clipboard) navigator.clipboard.writeText(inp.value);
+      else document.execCommand('copy');
+      const old = copyBtn.textContent; copyBtn.textContent = '✓'; setTimeout(()=>copyBtn.textContent=old, 900);
+    }
+    return;
+  }
+});
+
+document.addEventListener('change', (e)=>{
+  if(e.target.id==='voiceSelect'){ selectedVoiceURI = e.target.value; }
+  if(e.target.id==='ttsProviderSelect'){ toggleProviderFields(); }
+});
+
+function flashShuffled(){
+  const btn = document.getElementById('shuffleBtn');
+  const old = btn.textContent;
+  btn.textContent = '✓ Order shuffled';
+  setTimeout(()=>{ btn.textContent = old; }, 900);
+}
+
+document.addEventListener('input', (e)=>{
+  if(e.target.id==='searchInput'){ searchQuery = e.target.value; renderPool(); }
+  if(e.target.id==='pronSearch'){ renderPronList(e.target.value); }
+});
+document.addEventListener('keydown', (e)=>{
+  if(e.key==='Enter' && e.target.id==='customName'){ addCustomPlayer(); }
+});
+
+/* ============================= INIT ============================= */
+async function init(){
+  renderMasthead();
+
+  if(isCommissioner){
+    const btn = document.getElementById('remoteBtnStatic');
+    btn.style.display = 'inline-flex';
+    btn.onclick = openRemoteModal;
+  }
+
+  const cfg = effectiveFirebaseConfig();
+  if(cfg){
+    const ok = connectFirebase(cfg);
+    if(ok){
+      // subscribeRemote's listeners drive everything from here (setup/picks/customPlayers).
+      if(!isCommissioner) showWaitingScreen();
+      return;
+    }
+  }
+
+  if(!isCommissioner){
+    // A team link was opened but this device has no working Firebase connection —
+    // most likely the commissioner hasn't connected Remote Draft yet on the hosted copy.
+    document.getElementById('waitingSub').textContent =
+      "This is a team link, but this copy of the page isn't connected to a live draft yet. Ask the commissioner to set up Remote Draft.";
+    document.getElementById('waitingScreen').style.display='block';
+    return;
+  }
+
+  const savedSetup = await sGet(K_SETUP);
+  if(savedSetup && savedSetup.started){
+    setup = savedSetup;
+    picks = await sGet(K_PICKS) || [];
+    customPlayers = await sGet(K_CUSTOM) || [];
+    showDraftScreen();
+  } else {
+    showSetupScreen();
+  }
+}
+init();
+</script>
+</body>
+</html>
