@@ -998,6 +998,34 @@ function subscribeRemote(){
     customPlayers = val ? Object.values(val) : [];
     if(setup) renderPool();
   });
+  fbDb.ref('draft/timer').on('value', snap=>{
+    remoteTimerState = snap.val();
+    if(!isCommissioner) startRemoteTimerFollower();
+  });
+}
+
+// Non-commissioner devices don't run their own countdown — they just recompute the
+// remaining time from the commissioner's synced anchor point every second, read-only.
+let remoteTimerState = null;
+let remoteTimerHandle = null;
+function startRemoteTimerFollower(){
+  if(remoteTimerHandle){ clearInterval(remoteTimerHandle); remoteTimerHandle=null; }
+  if(!remoteTimerState || !setup || !setup.timerSeconds || isComplete()){
+    timerRemaining = null; renderTimer(); return;
+  }
+  const compute = ()=>{
+    if(remoteTimerState.paused){
+      timerRemaining = remoteTimerState.remainingAtPause;
+      timerPaused = true;
+    } else {
+      const elapsed = Math.floor((Date.now() - remoteTimerState.anchorAt) / 1000);
+      timerRemaining = Math.max(0, remoteTimerState.durationSec - elapsed);
+      timerPaused = false;
+    }
+    renderTimer();
+  };
+  compute();
+  remoteTimerHandle = setInterval(compute, 1000);
 }
 
 // Called whenever setup or picks change, whether from this device or another one.
@@ -1388,16 +1416,27 @@ function clockJingle(){
 
 function clearTimerHandle(){ if(timerHandle){ clearInterval(timerHandle); timerHandle=null; } }
 
+function syncTimerState(){
+  if(!remoteMode || !isCommissioner || !fbDb) return;
+  if(timerRemaining==null){ fbDb.ref('draft/timer').remove(); return; }
+  if(timerPaused){
+    fbDb.ref('draft/timer').set({paused:true, remainingAtPause:timerRemaining, anchorAt:null, durationSec:setup.timerSeconds});
+  } else {
+    fbDb.ref('draft/timer').set({paused:false, anchorAt:Date.now(), durationSec:timerRemaining, remainingAtPause:null});
+  }
+}
+
 function startTimerForCurrentPick(){
   clearTimerHandle();
   if(!isComplete()){ clockJingle(); }
   if(!setup || !setup.timerSeconds || setup.timerSeconds<=0 || isComplete()){
-    timerRemaining = null; timerPaused = false; renderTimer(); return;
+    timerRemaining = null; timerPaused = false; renderTimer(); syncTimerState(); return;
   }
   timerRemaining = setup.timerSeconds;
   timerPaused = false;
   renderTimer();
   timerHandle = setInterval(timerTick, 1000);
+  syncTimerState();
 }
 
 function timerTick(){
@@ -1415,6 +1454,7 @@ function resetTimer(){
   timerPaused = false;
   renderTimer();
   timerHandle = setInterval(timerTick, 1000);
+  syncTimerState();
 }
 
 function extendTimer(sec){
@@ -1422,12 +1462,14 @@ function extendTimer(sec){
   timerRemaining += sec;
   renderTimer();
   if(!timerHandle && !isComplete()){ timerHandle = setInterval(timerTick, 1000); }
+  syncTimerState();
 }
 
 function togglePauseTimer(){
   if(timerRemaining==null) return;
   timerPaused = !timerPaused;
   renderTimer();
+  syncTimerState();
 }
 
 function toggleSound(){
@@ -1796,8 +1838,8 @@ function renderTopButtons(){
   if(isCommissioner){
     html += `<button class="btn" id="editTeamsBtn">✏️ Edit teams</button>`;
     html += `<button class="btn" id="announcerBtn">🗣️ Announcer</button>`;
+    html += `<button class="btn" id="exportBtn" ${picks.length===0?'disabled':''}>⬇ Export CSV</button>`;
   }
-  html += `<button class="btn" id="exportBtn" ${picks.length===0?'disabled':''}>⬇ Export CSV</button>`;
   if(isComplete()){
     html += `<button class="btn" id="viewToggleBtn">${completeView==='grades' ? '📋 View board' : '🏆 View grades'}</button>`;
   }
@@ -1809,10 +1851,10 @@ function renderTopButtons(){
   if(isCommissioner){
     document.getElementById('editTeamsBtn').onclick = openEditTeams;
     document.getElementById('announcerBtn').onclick = openAnnouncerModal;
+    document.getElementById('exportBtn').onclick = downloadCSV;
     document.getElementById('undoBtn').onclick = undoPick;
     document.getElementById('resetBtn').onclick = resetDraft;
   }
-  document.getElementById('exportBtn').onclick = downloadCSV;
   const vt = document.getElementById('viewToggleBtn');
   if(vt) vt.onclick = ()=>{ completeView = completeView==='grades' ? 'board' : 'grades'; renderAll(); };
 }
@@ -2022,6 +2064,11 @@ async function init(){
     const btn = document.getElementById('remoteBtnStatic');
     btn.style.display = 'inline-flex';
     btn.onclick = openRemoteModal;
+  } else {
+    const tc = document.querySelector('.timer-controls');
+    if(tc) tc.style.display = 'none';
+    const me = document.getElementById('mastheadEdit');
+    if(me) me.style.display = 'none';
   }
 
   const cfg = effectiveFirebaseConfig();
