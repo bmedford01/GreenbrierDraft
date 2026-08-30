@@ -903,7 +903,7 @@ async function sDel(key){
 // Commissioner: paste your Firebase config here to bake a working connection into every
 // copy of this file (so players don't have to configure anything). Leave as null to require
 // each device to connect manually via the Remote Draft settings instead.
-const FIREBASE_CONFIG = null;
+const FIREBASE_CONFIG = { apiKey: "AIzaSyBuydWP-uN7CtIIDoCf_rRZ3JA0fytohek", databaseURL: "https://greenbrier-draft-default-rtdb.firebaseio.com", projectId: "greenbrier-draft" };
 // Example: const FIREBASE_CONFIG = { apiKey:"AIza...", databaseURL:"https://your-project-default-rtdb.firebaseio.com", projectId:"your-project" };
 
 const urlParams = new URLSearchParams(location.search);
@@ -1986,9 +1986,12 @@ async function init(){
 
   if(!isCommissioner){
     // A team link was opened but this device has no working Firebase connection —
-    // most likely the commissioner hasn't connected Remote Draft yet on the hosted copy.
+    // the commissioner needs to bake FIREBASE_CONFIG into the hosted file itself,
+    // since localStorage settings never travel to other people's devices.
+    document.getElementById('setup').style.display='none';
+    document.getElementById('draft').style.display='none';
     document.getElementById('waitingSub').textContent =
-      "This is a team link, but this copy of the page isn't connected to a live draft yet. Ask the commissioner to set up Remote Draft.";
+      "This is a team link, but this copy of the page isn't connected to a live draft yet. Ask the commissioner to finish Remote Draft setup.";
     document.getElementById('waitingScreen').style.display='block';
     return;
   }
