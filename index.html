@@ -224,6 +224,7 @@ button{font-family:inherit; cursor:pointer;}
   .pool-wrap{padding:16px 16px 20px;}
   .search-row input{padding:12px 14px; font-size:16px;}
   .pos-tab{padding:8px 15px; font-size:13px;}
+  .mode-tab{padding:8px 15px; font-size:13px;}
   .player-row{padding:12px 10px; gap:10px;}
   .player-name{font-size:15px;}
   .player-rank{width:24px;}
@@ -278,6 +279,13 @@ td.cell-onclock{
 }
 .search-row input:focus{outline:none; border-color:var(--turf);}
 .pos-tabs{display:flex; gap:6px; flex-wrap:wrap;}
+.pool-mode-tabs{display:flex; gap:6px;}
+.mode-tab{
+  padding:7px 16px; border-radius:20px; font-size:12.5px; font-weight:700; border:1px solid var(--line-strong);
+  background:var(--panel-2); color:var(--chalk-dim);
+}
+.mode-tab.active{background:var(--chalk); border-color:var(--chalk); color:#08150d;}
+.mode-tab .count-badge{opacity:0.7; font-weight:600;}
 .pos-tab{
   padding:6px 12px; border-radius:20px; font-size:12px; font-weight:700; border:1px solid var(--line-strong);
   background:var(--panel-2); color:var(--chalk-dim);
@@ -307,10 +315,6 @@ td.cell-onclock{
 .drafted-row .player-name{text-decoration:line-through; color:var(--chalk-dim2);}
 .drafted-row .badge{
   font-size:10px; font-family:'JetBrains Mono'; color:var(--chalk-dim2); flex-shrink:0;
-}
-.drafted-toggle{
-  display:flex; justify-content:space-between; align-items:center; padding:10px 4px 2px; font-size:12px;
-  color:var(--chalk-dim); cursor:pointer; user-select:none;
 }
 .add-custom{
   display:flex; gap:8px; margin-top:10px;
@@ -493,6 +497,10 @@ td.cell-onclock{
       <div class="section-title"><h2>Player Pool</h2><span class="mono" id="poolCount" style="font-size:11px;color:var(--chalk-dim2);"></span></div>
       <div class="pool-controls">
         <div class="search-row"><input type="text" id="searchInput" placeholder="Search players…"></div>
+        <div class="pool-mode-tabs" id="poolModeTabs">
+          <button class="mode-tab active" data-mode="available">Available</button>
+          <button class="mode-tab" data-mode="drafted">Drafted <span id="draftedCountBadge"></span></button>
+        </div>
         <div class="pos-tabs" id="posTabs"></div>
       </div>
       <div class="pool-list" id="poolList"></div>
@@ -1167,7 +1175,7 @@ let picks = [];        // [{overall, teamIdx, playerId}]
 let customPlayers = [];
 let posFilter = 'ALL';
 let searchQuery = '';
-let showDrafted = false;
+let poolMode = 'available'; // 'available' | 'drafted'
 let completeView = 'grades'; // 'grades' | 'board' — which panel shows once the draft is done
 
 /* ---- timer / audio state ---- */
@@ -1574,7 +1582,8 @@ async function startDraft(){
     await remoteSaveSetup(setup);
     await fbDb.ref('draft/picks').set([]);
     await remoteSaveCustomPlayers(customPlayers);
-    // subscribeRemote's listeners will drive the screen switch + render
+    showDraftScreen(true);
+    startTimerForCurrentPick();
   } else {
     await sSet(K_SETUP, setup);
     await sSet(K_PICKS, picks);
@@ -1698,40 +1707,47 @@ function renderPool(){
     return true;
   });
 
+  document.getElementById('draftedCountBadge').textContent = `(${drafted.size})`;
+
   const complete = isComplete();
   const notMyTurn = remoteMode && !isCommissioner && !complete && snakeTeamForPick(currentPickIdx(), setup.order).teamIdx !== myTeamIdx;
   let html = '';
-  if(available.length===0){
-    html += `<div class="empty-note">No matching available players.</div>`;
-  } else {
-    html += available.map(p=>`
-      <div class="player-row">
-        <span class="player-rank">${p.rank ?? '—'}</span>
-        <span class="player-pos">${p.pos}</span>
-        <span class="player-name">${p.name}</span>
-        <span class="player-team">${p.team||''}</span>
-        <button class="draft-btn" data-draft="${p.id}" ${(complete||notMyTurn)?'disabled':''}>${notMyTurn?'Wait':'Draft'}</button>
-      </div>`).join('');
-  }
 
-  html += `<div class="drafted-toggle" id="draftedToggle"><span>Drafted (${draftedList.length})</span><span>${showDrafted?'▲ hide':'▼ show'}</span></div>`;
-  if(showDrafted){
-    const picksByPlayer = {};
-    picks.forEach(pk=>{ picksByPlayer[pk.playerId]=pk; });
-    html += draftedList.map(p=>{
-      const pk = picksByPlayer[p.id];
-      const teamName = pk? setup.teamNames[pk.teamIdx] : '';
-      return `<div class="player-row drafted-row">
-        <span class="player-rank">${p.rank ?? '—'}</span>
-        <span class="player-pos">${p.pos}</span>
-        <span class="player-name">${p.name}</span>
-        <span class="badge">${teamName}</span>
-      </div>`;
-    }).join('');
+  if(poolMode === 'available'){
+    if(available.length===0){
+      html = `<div class="empty-note">No matching available players.</div>`;
+    } else {
+      html = available.map(p=>`
+        <div class="player-row">
+          <span class="player-rank">${p.rank ?? '—'}</span>
+          <span class="player-pos">${p.pos}</span>
+          <span class="player-name">${p.name}</span>
+          <span class="player-team">${p.team||''}</span>
+          <button class="draft-btn" data-draft="${p.id}" ${(complete||notMyTurn)?'disabled':''}>${notMyTurn?'Wait':'Draft'}</button>
+        </div>`).join('');
+    }
+    document.getElementById('poolCount').textContent = `${available.length} available`;
+  } else {
+    if(draftedList.length===0){
+      html = `<div class="empty-note">No drafted players match.</div>`;
+    } else {
+      const picksByPlayer = {};
+      picks.forEach(pk=>{ picksByPlayer[pk.playerId]=pk; });
+      html = draftedList.map(p=>{
+        const pk = picksByPlayer[p.id];
+        const teamName = pk ? setup.teamNames[pk.teamIdx] : '';
+        return `<div class="player-row drafted-row">
+          <span class="player-rank">${p.rank ?? '—'}</span>
+          <span class="player-pos">${p.pos}</span>
+          <span class="player-name">${p.name}</span>
+          <span class="badge">${teamName}</span>
+        </div>`;
+      }).join('');
+    }
+    document.getElementById('poolCount').textContent = `${draftedList.length} drafted`;
   }
 
   document.getElementById('poolList').innerHTML = html;
-  document.getElementById('poolCount').textContent = `${available.length} available`;
 }
 
 function computeGrades(){
@@ -1968,7 +1984,13 @@ document.addEventListener('click', (e)=>{
   const posTab = e.target.closest('.pos-tab');
   if(posTab){ posFilter = posTab.dataset.pos; renderPosTabs(); renderPool(); return; }
 
-  if(e.target.id==='draftedToggle' || e.target.closest('#draftedToggle')){ showDrafted=!showDrafted; renderPool(); return; }
+  const modeTab = e.target.closest('.mode-tab');
+  if(modeTab){
+    poolMode = modeTab.dataset.mode;
+    document.querySelectorAll('.mode-tab').forEach(t=>t.classList.toggle('active', t===modeTab));
+    renderPool();
+    return;
+  }
 
   if(e.target.id==='shuffleBtn'){ window._pendingOrder = shuffleOrder(); flashShuffled(); return; }
 
